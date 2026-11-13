@@ -1,4 +1,4 @@
-"""Ventana principal: panel lateral de navegación + barra superior con botón Volver."""
+"""Ventana principal: panel lateral de navegación + barra superior con el título de la sección."""
 import tkinter as tk
 
 from gui import estilo as E
@@ -57,7 +57,6 @@ class Principal(tk.Frame):
         super().__init__(padre, bg=E.FONDO)
         self.app = app
         self.actual = None
-        self.historial = []
 
         # ---------------------------------------------------- panel lateral
         lateral = tk.Frame(self, bg=E.MARINO, width=240)
@@ -99,11 +98,8 @@ class Principal(tk.Frame):
         barra = tk.Frame(contenido, bg=E.BLANCO, height=68)
         barra.pack(fill="x")
         barra.pack_propagate(False)
-        self.btn_volver = Boton(barra, "←  Volver", self.volver, "secundario", padx=14, pady=7,
-                                fondo=E.BLANCO)
-        self.btn_volver.pack(side="left", padx=(24, 16), pady=16)
         self.lbl_titulo = tk.Label(barra, font=E.F_H2, fg=E.TEXTO, bg=E.BLANCO)
-        self.lbl_titulo.pack(side="left")
+        self.lbl_titulo.pack(side="left", padx=28)
         tk.Frame(contenido, bg=E.BORDE, height=1).pack(fill="x")
 
         zona = tk.Frame(contenido, bg=E.FONDO)
@@ -116,7 +112,7 @@ class Principal(tk.Frame):
             "Perfil": PestanaPerfil(zona, app),
         }
         self.actualizar_usuario()
-        self.ir("Muro", guardar=False)
+        self.ir("Muro")
 
     # ------------------------------------------------------------ usuario
     def actualizar_usuario(self):
@@ -127,14 +123,11 @@ class Principal(tk.Frame):
         self.lbl_usuario.config(text="@" + p["usuario"])
 
     # --------------------------------------------------------- navegación
-    def ir(self, nombre, guardar=True):
+    def ir(self, nombre):
         if nombre == self.actual:
             self.pestanas[nombre].refrescar()
             return
         if self.actual:
-            if guardar:
-                self.historial.append(self.actual)
-                del self.historial[:-20]
             self.pestanas[self.actual].pack_forget()
             self.nav[self.actual].activar(False)
         self.actual = nombre
@@ -142,13 +135,7 @@ class Principal(tk.Frame):
         self.nav[nombre].activar(True)
         self.nav[nombre].avisar(False)
         self.lbl_titulo.config(text=self.TITULOS[nombre])
-        self.btn_volver.habilitar(bool(self.historial))
         self.pestanas[nombre].refrescar()
-
-    def volver(self):
-        """Regresa a la sección anterior."""
-        if self.historial:
-            self.ir(self.historial.pop(), guardar=False)
 
     def abrir_chat(self, usuario):
         self.ir("Chat")

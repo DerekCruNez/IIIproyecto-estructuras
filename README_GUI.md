@@ -9,7 +9,7 @@ Ejecutar siempre `main.py` desde la carpeta raíz del proyecto (no los archivos 
 Estructura: `main.py` + carpeta `gui/`:
 - `app.py`: ventana raíz y navegación entre pantallas.
 - `vistas_acceso.py`: conexión, login y registro (con botón Volver).
-- `principal.py`: panel lateral, barra superior con botón **Volver** (historial de secciones).
+- `principal.py`: panel lateral de navegación y barra superior con el título de la sección.
 - `muro.py`, `amigos.py`, `buscar.py`, `chat.py`, `perfil.py`: las secciones.
 - `textos.py`: textos principales (lema, títulos, ventajas); edítalo para cambiar el lenguaje.
 - `estilo.py`: paleta "Bosque y ámbar", fuentes y alertas (estilo único). `widgets.py`: botón, campo, tarjeta, avatar.
