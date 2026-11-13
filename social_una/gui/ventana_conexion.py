@@ -22,3 +22,4 @@ class VentanaConexion:
     def conectar(self) -> None:
         """Intenta conectar al servidor usando los datos ingresados."""
         raise NotImplementedError
+    
