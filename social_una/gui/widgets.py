@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 
 from gui import estilo as E
-from gui.imagenes import avatar as _avatar
+from gui.imagenes import avatar as _avatar, cuadros_avatar
 
 
 def _rect_redondeado(canvas, x1, y1, x2, y2, r, **kw):
@@ -17,14 +17,17 @@ class Boton(tk.Canvas):
 
     estilos: primario, secundario, fantasma (sin fondo), peligro, oscuro (sobre el panel lateral)
     """
-    # (fondo normal, fondo hover, color del texto)
-    ESTILOS = {
-        "primario": (E.ACENTO, E.ACENTO_HOVER, "#ffffff"),
-        "secundario": (E.BOTON_SEC, E.BOTON_SEC_HOVER, E.TEXTO),
-        "fantasma": (None, E.BOTON_SEC, E.ACENTO),
-        "peligro": ("#fee2e2", "#fecaca", E.ROJO),
-        "oscuro": (E.MARINO_2, "#1b5863", "#ffffff"),
-    }
+    @staticmethod
+    def estilos():
+        """(fondo normal, fondo hover, color del texto). Se calcula al pintar para
+        que el botón use los colores del tema actual."""
+        return {
+            "primario": (E.ACENTO, E.ACENTO_HOVER, "#ffffff"),
+            "secundario": (E.BOTON_SEC, E.BOTON_SEC_HOVER, E.TEXTO),
+            "fantasma": (None, E.BOTON_SEC, E.ACENTO if E.TEMA == "claro" else E.LATERAL_TEXTO),
+            "peligro": (E.PELIGRO_FONDO, E.PELIGRO_HOVER, E.ROJO),
+            "oscuro": (E.MARINO_2, E.OSCURO_HOVER, "#ffffff"),
+        }
 
     def __init__(self, padre, texto, comando=None, estilo="primario", ancho=None,
                  padx=18, pady=9, fuente=None, fondo=None):
@@ -52,7 +55,7 @@ class Boton(tk.Canvas):
         self._pintar()
 
     def _pintar(self):
-        normal, hover, color = self.ESTILOS[self.estilo]
+        normal, hover, color = self.estilos()[self.estilo]
         if not self.habilitado:
             fondo, color = (E.BOTON_SEC if normal else None), E.GRIS_PH
         else:
@@ -79,6 +82,10 @@ class Boton(tk.Canvas):
         self.habilitado = valor
         self._pintar()
 
+    def cambiar_estilo(self, estilo):
+        self.estilo = estilo
+        self._pintar()
+
 
 class Campo(tk.Frame):
     """Campo de una línea con etiqueta opcional, borde que cambia al enfocar y placeholder."""
@@ -94,11 +101,11 @@ class Campo(tk.Frame):
         self._ph_activo = False
         self.borde = tk.Frame(self, bg=E.BORDE, padx=1, pady=1)
         self.borde.pack(fill="x")
-        interior = tk.Frame(self.borde, bg="white")
+        interior = tk.Frame(self.borde, bg=E.CAMPO)
         interior.pack(fill="x")
         self.var = tk.StringVar(value=valor)
         self.entrada = tk.Entry(interior, textvariable=self.var, relief="flat", bd=0, font=E.F_NORMAL,
-                                bg="white", fg=E.TEXTO, insertbackground=E.TEXTO,
+                                bg=E.CAMPO, fg=E.TEXTO, insertbackground=E.TEXTO,
                                 highlightthickness=0, show=self._oculto)
         self.entrada.pack(fill="x", padx=10, ipady=7)
         self.entrada.bind("<FocusIn>", self._al_enfocar)
@@ -136,6 +143,16 @@ class Campo(tk.Frame):
     def focus(self):
         self.entrada.focus_set()
 
+    def insertar(self, texto):
+        """Inserta en el cursor (p. ej. un emoji). Quita antes el texto de ayuda: si no,
+        al recibir el foco el campo borraba todo, también lo insertado."""
+        if self._ph_activo:
+            self._ph_activo = False
+            self.entrada.config(fg=E.TEXTO, show=self._oculto)
+            self.var.set("")
+        self.entrada.insert("insert", texto)
+        self.entrada.focus_set()
+
     def al_presionar_enter(self, funcion):
         self.entrada.bind("<Return>", lambda _e: funcion())
 
@@ -148,7 +165,7 @@ class AreaTexto(tk.Frame):
         self.borde = tk.Frame(self, bg=E.BORDE, padx=1, pady=1)
         self.borde.pack(fill="both", expand=True)
         self.texto = tk.Text(self.borde, height=alto, wrap="word", relief="flat", bd=0,
-                             font=E.F_NORMAL, bg="white", fg=E.TEXTO, insertbackground=E.TEXTO,
+                             font=E.F_NORMAL, bg=E.CAMPO, fg=E.TEXTO, insertbackground=E.TEXTO,
                              highlightthickness=0, padx=10, pady=8, undo=True)
         self.texto.pack(fill="both", expand=True)
         self.texto.bind("<FocusIn>", lambda _e: self.borde.config(bg=E.ACENTO))
@@ -164,23 +181,77 @@ class AreaTexto(tk.Frame):
     def limpiar(self):
         self.texto.delete("1.0", "end")
 
+    def insertar(self, texto):
+        self.texto.insert("insert", texto)
+        self.texto.focus_set()
+
 
 class Tarjeta(tk.Frame):
-    """Contenedor blanco con borde fino."""
+    """Contenedor del color de superficie con borde fino.
 
-    def __init__(self, padre, **kw):
+    hover=True: el borde toma el color de acento cuando el mouse está encima.
+    """
+
+    def __init__(self, padre, hover=False, **kw):
         super().__init__(padre, bg=E.BLANCO, highlightbackground=E.BORDE,
                          highlightcolor=E.BORDE, highlightthickness=1, **kw)
+        if hover:
+            self.bind("<Enter>", lambda _e: self.config(
+                highlightbackground=E.mezclar(E.BORDE, E.ACENTO, 0.6)), add="+")
+            self.bind("<Leave>", self._salir, add="+")
+
+    def _salir(self, e):
+        # <Leave> también llega al pasar a un hijo; solo se apaga al salir de verdad
+        w = self.winfo_containing(e.x_root, e.y_root)
+        while w is not None and w is not self:
+            w = w.master
+        if w is None:
+            self.config(highlightbackground=E.BORDE)
 
 
 class Avatar(tk.Label):
-    def __init__(self, padre, nombre, usuario, ruta=None, lado=40, fondo=None):
-        self._foto = _avatar(nombre, usuario, ruta, lado)
-        super().__init__(padre, image=self._foto, bg=fondo or padre.cget("bg"), bd=0)
+    """Avatar redondo. Con animado=True, un GIF se reproduce en bucle."""
+
+    def __init__(self, padre, nombre, usuario, ruta=None, lado=40, fondo=None, animado=False):
+        super().__init__(padre, bg=fondo or padre.cget("bg"), bd=0)
+        self._animado = animado
+        self._turno = 0
+        self.cambiar(nombre, usuario, ruta, lado)
 
     def cambiar(self, nombre, usuario, ruta=None, lado=40):
+        self._turno += 1                     # detiene una animación anterior
         self._foto = _avatar(nombre, usuario, ruta, lado)
         self.config(image=self._foto)
+        cuadros = cuadros_avatar(ruta, lado) if self._animado else None
+        if cuadros:
+            self._animar(cuadros, 0, self._turno)
+
+    def _animar(self, cuadros, i, turno):
+        if turno != self._turno or not self.winfo_exists():
+            return
+        imagenes, tiempos = cuadros
+        self.config(image=imagenes[i])
+        self.after(tiempos[i], lambda: self._animar(cuadros, (i + 1) % len(imagenes), turno))
+
+
+def animar(etiqueta, cuadros, i=0):
+    """Reproduce en bucle los cuadros ([PhotoImage], [ms]) de un GIF en una etiqueta."""
+    if not etiqueta.winfo_exists():
+        return
+    imagenes, tiempos = cuadros
+    etiqueta.config(image=imagenes[i])
+    etiqueta.after(tiempos[i], lambda: animar(etiqueta, cuadros, (i + 1) % len(imagenes)))
+
+
+def pulso(etiqueta, tamanos=(15, 19, 16, 14), familia=None, peso="normal"):
+    """Animación de 'latido': cambia el tamaño de la fuente de una etiqueta."""
+    familia = familia or E.FAMILIA
+
+    def paso(i):
+        if i < len(tamanos) and etiqueta.winfo_exists():
+            etiqueta.config(font=(familia, tamanos[i], peso))
+            etiqueta.after(45, lambda: paso(i + 1))
+    paso(0)
 
 
 def vacio(padre, mensaje, fondo=None):
@@ -192,18 +263,27 @@ def vacio(padre, mensaje, fondo=None):
 class FilaUsuario(tk.Frame):
     """Fila de lista: avatar, nombre, subtítulo y botones de acción a la derecha."""
 
-    def __init__(self, padre, usuario, nombre, subtitulo="", en_linea=None, acciones=(), etiqueta=""):
+    def __init__(self, padre, usuario, nombre, subtitulo="", en_linea=None, acciones=(), etiqueta="",
+                 ruta_foto=None, al_click=None):
         fondo = padre.cget("bg")
         super().__init__(padre, bg=fondo)
         fila = tk.Frame(self, bg=fondo)
         fila.pack(fill="x", padx=14, pady=10)
-        Avatar(fila, nombre, usuario, lado=42, fondo=fondo).pack(side="left")
+        av = Avatar(fila, nombre, usuario, ruta_foto, lado=42, fondo=fondo)
+        av.pack(side="left")
 
         texto = tk.Frame(fila, bg=fondo)
         texto.pack(side="left", padx=(12, 0))
         arriba = tk.Frame(texto, bg=fondo)
         arriba.pack(anchor="w")
-        E.etiqueta(arriba, nombre, E.F_NEG, E.TEXTO, fondo).pack(side="left")
+        lbl = E.etiqueta(arriba, nombre, E.F_NEG, E.TEXTO, fondo)
+        lbl.pack(side="left")
+        if al_click:   # clic en la foto o el nombre: ver el perfil
+            for w in (av, lbl):
+                w.config(cursor="hand2")
+                w.bind("<Button-1>", lambda _e: al_click())
+            lbl.bind("<Enter>", lambda _e: lbl.config(font=(E.FAMILIA, 10, "bold underline")))
+            lbl.bind("<Leave>", lambda _e: lbl.config(font=E.F_NEG))
         if en_linea is not None:
             E.etiqueta(arriba, "  ●", E.F_PEQ, E.VERDE if en_linea else E.GRIS_CLARO, fondo).pack(side="left")
         sub = subtitulo or f"@{usuario}"

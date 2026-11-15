@@ -37,12 +37,23 @@ Desde la carpeta `social_una/`:
 python servidor.py
 ```
 
+Al arrancar muestra la IP que deben escribir los demás. Escucha en todas las
+interfaces (0.0.0.0); si otra computadora no conecta, abre el puerto 5000 en el
+firewall de Windows. Para datos de prueba: `python generar_datos.py`.
+
 ### Cliente
 
 Desde la carpeta `social_una/`:
 
 ```bash
-python main.py
+python main.py          # se conecta a un servidor
+python main.py --demo   # modo demostración, sin servidor
+```
+
+### Pruebas
+
+```bash
+python -m unittest tests.test_servidor tests.test_cliente
 ```
 
 ## Estructura de carpetas
@@ -59,24 +70,30 @@ social_una/
 ├── almacen.py           # Angel - Almacenamiento en memoria y disco
 ├── generar_datos.py     # Angel - Generador de datos de prueba
 ├── main.py              # Brayan - Punto de entrada del cliente
-├── gui/
-│   ├── __init__.py
-│   ├── estilo.py
-│   ├── ventana_conexion.py
-│   ├── ventana_login.py
-│   ├── ventana_registro.py
-│   ├── ventana_principal.py
-│   ├── pestana_muro.py
-│   ├── pestana_amigos.py
-│   ├── pestana_buscar.py
-│   ├── pestana_chat.py
-│   └── pestana_perfil.py
+├── gui/                 # Brayan - interfaz (ver docs/README_GUI.md)
+│   ├── app.py           # ventana raíz, navegación, tema y eventos
+│   ├── vistas_acceso.py # conexión, login y registro
+│   ├── principal.py     # menú lateral con contadores de novedades
+│   ├── muro.py          # publicaciones, me gusta animado y reacciones
+│   ├── chat.py          # chat estilo Discord: GIF, stickers, voz, archivos, encuestas
+│   ├── juegos.py        # Serpiente, Buscaminas y 3 en raya con leaderboard y medallas
+│   ├── emojis.py        # emojis a color (Pillow), burbujas y stickers
+│   ├── selectores.py    # ventanitas de emojis, stickers y GIFs
+│   ├── sonidos.py       # tonos de notificación, preferencias y grabación de voz
+│   ├── amigos.py, buscar.py
+│   ├── perfil.py        # perfil estilo Discord: banner, foto/GIF, bio
+│   ├── apariencia.py    # modo claro/oscuro y paletas de color
+│   ├── estilo.py        # temas, paletas, fuentes, toasts
+│   ├── widgets.py, imagenes.py, textos.py
+│   └── cliente_demo.py  # cliente falso para --demo
+├── tests/               # pruebas de servidor y cliente
 ├── datos/
 │   ├── .gitkeep
 │   └── imagenes/.gitkeep
 └── docs/
     ├── PROTOCOLO.md
     ├── CONTRATO_FUNCIONES.md
+    ├── CONTRATO_CLIENTE.md
     └── REPARTO.md
 ```
 

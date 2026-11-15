@@ -10,6 +10,8 @@ from gui.amigos import PestanaAmigos
 from gui.buscar import PestanaBuscar
 from gui.chat import PestanaChat
 from gui.perfil import PestanaPerfil
+from gui.apariencia import PestanaApariencia
+from gui.juegos import PestanaJuegos
 
 
 class ItemNav(tk.Frame):
@@ -24,7 +26,9 @@ class ItemNav(tk.Frame):
         self.texto = tk.Label(self, text=texto, font=(E.FAMILIA, 11), fg=E.LATERAL_TEXTO, bg=E.MARINO,
                               anchor="w", padx=20, pady=12)
         self.texto.pack(side="left", fill="x", expand=True)
-        self.aviso = tk.Label(self, text="●", font=E.F_PEQ, fg=E.DESTACADO, bg=E.MARINO, padx=14)
+        # insignia de novedades: un número (mensajes, solicitudes...) o un punto
+        self.aviso = tk.Label(self, font=E.F_PEQ_NEG, fg=E.MARINO, bg=E.DESTACADO, padx=6)
+        self.cantidad = 0
         for w in (self, self.barra, self.texto, self.aviso):
             w.bind("<Button-1>", lambda _e: self.comando())
             w.bind("<Enter>", lambda _e: self._pintar(True))
@@ -32,7 +36,7 @@ class ItemNav(tk.Frame):
 
     def _pintar(self, hover=False):
         fondo = E.MARINO_2 if (self.activo or hover) else E.MARINO
-        for w in (self, self.texto, self.aviso):
+        for w in (self, self.texto):
             w.config(bg=fondo)
         self.barra.config(bg=E.DESTACADO if self.activo else fondo)
         self.texto.config(fg="white" if self.activo else E.LATERAL_TEXTO,
@@ -43,14 +47,17 @@ class ItemNav(tk.Frame):
         self._pintar()
 
     def avisar(self, valor):
-        if valor:
-            self.aviso.pack(side="right")
+        """valor: False/0 = quitar; True = sumar uno al contador."""
+        self.cantidad = self.cantidad + 1 if valor else 0
+        if self.cantidad:
+            self.aviso.config(text="9+" if self.cantidad > 9 else str(self.cantidad))
+            self.aviso.pack(side="right", padx=(0, 14))
         else:
             self.aviso.pack_forget()
 
 
 class Principal(tk.Frame):
-    NAV = ("Muro", "Amigos", "Buscar", "Chat", "Perfil")
+    NAV = ("Muro", "Amigos", "Buscar", "Chat", "Juegos", "Perfil", "Personalizar")
     TITULOS = T.TITULOS_SECCION
 
     def __init__(self, padre, app):
@@ -81,7 +88,9 @@ class Principal(tk.Frame):
         tk.Frame(pie, bg=E.MARINO_2, height=1).pack(fill="x", pady=(0, 14))
         fila = tk.Frame(pie, bg=E.MARINO)
         fila.pack(fill="x")
-        self.av_lateral = Avatar(fila, "", "", lado=40, fondo=E.MARINO)
+        self.av_lateral = Avatar(fila, "", "", lado=40, fondo=E.MARINO, animado=True)
+        self.av_lateral.config(cursor="hand2")
+        self.av_lateral.bind("<Button-1>", lambda _e: self.ir("Perfil"))
         self.av_lateral.pack(side="left")
         datos = tk.Frame(fila, bg=E.MARINO)
         datos.pack(side="left", padx=(10, 0))
@@ -110,6 +119,8 @@ class Principal(tk.Frame):
             "Buscar": PestanaBuscar(zona, app),
             "Chat": PestanaChat(zona, app),
             "Perfil": PestanaPerfil(zona, app),
+            "Personalizar": PestanaApariencia(zona, app),
+            "Juegos": PestanaJuegos(zona, app),
         }
         self.actualizar_usuario()
         self.ir("Muro")
@@ -117,7 +128,7 @@ class Principal(tk.Frame):
     # ------------------------------------------------------------ usuario
     def actualizar_usuario(self):
         p = self.app.perfil
-        ruta = self.app.cliente.ruta_imagen(p.get("foto")) if p.get("foto") else None
+        ruta = self.app.ruta_foto(p)
         self.av_lateral.cambiar(p["nombre"], p["usuario"], ruta, 40)
         self.lbl_nombre.config(text=p["nombre"])
         self.lbl_usuario.config(text="@" + p["usuario"])
@@ -144,15 +155,40 @@ class Principal(tk.Frame):
     # eventos enviados por el servidor sin que el usuario los pida
     def manejar_evento(self, ev):
         tipo = ev.get("tipo")
+        toast = E.Toast
         if tipo == "chat":
             self.pestanas["Chat"].recibir(ev)
             if self.actual != "Chat":
+                from gui.chat import resumen
+                m = ev.get("mensaje") or ev
                 self.nav["Chat"].avisar(True)
+                donde = " en la sala general" if m.get("receptor") == "#general" else ""
+                toast(self.app, f"@{m.get('emisor')}{donde}: {resumen(m)[:60]}",
+                      icono="💬", comando=lambda: self.ir("Chat"))
+        elif tipo == "invitacion_juego":
+            self.pestanas["Juegos"].invitacion(ev)
+        elif tipo == "juego_rechazado":
+            toast(self.app, f"@{ev.get('usuario')} rechazó el reto", icono="🎮")
+        elif tipo == "partida":
+            self.pestanas["Juegos"].partida(ev)
+        elif tipo == "mensaje_actualizado":
+            self.pestanas["Chat"].actualizar(ev)
         elif tipo == "en_linea":
+            if ev.get("en_linea"):
+                toast(self.app, f"@{ev.get('usuario')} se conectó", icono="●")
             if self.actual in ("Amigos", "Chat"):
                 self.pestanas[self.actual].refrescar()
         elif tipo == "solicitud":
+            toast(self.app, f"@{ev.get('usuario')} quiere ser tu amigo", icono="👋",
+                  comando=lambda: self.ir("Amigos"))
             if self.actual == "Amigos":
                 self.pestanas["Amigos"].refrescar()
             else:
                 self.nav["Amigos"].avisar(True)
+        elif tipo == "publicacion":
+            if self.actual == "Muro":
+                self.pestanas["Muro"].refrescar()
+            else:
+                self.nav["Muro"].avisar(True)
+                toast(self.app, f"@{ev.get('autor')} publicó algo nuevo", icono="📝",
+                      comando=lambda: self.ir("Muro"))

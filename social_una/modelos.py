@@ -4,6 +4,7 @@ Define las clases Usuario, Publicacion y Mensaje con serialización
 a diccionario y reconstrucción desde diccionario.
 """
 
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -24,6 +25,10 @@ class Usuario:
         bio: str = "",
         foto: str = "",
         link: str = "",
+        banner: str = "",
+        color_perfil: str = "",
+        tema: str = "claro",
+        paleta: str = "bosque",
     ) -> None:
         if not id or not id.strip():
             raise ValueError("El id del usuario no puede estar vacío.")
@@ -41,6 +46,12 @@ class Usuario:
         self.bio = bio or ""
         self.foto = foto or ""
         self.link = link or ""
+        # Personalización (estilo Discord): banner (imagen o vacío), color del
+        # banner, tema claro/oscuro y paleta de acento de la interfaz.
+        self.banner = banner or ""
+        self.color_perfil = color_perfil or ""
+        self.tema = tema or "claro"
+        self.paleta = paleta or "bosque"
 
     def a_dict(self) -> dict[str, Any]:
         """Convierte el usuario a un diccionario serializable."""
@@ -52,7 +63,17 @@ class Usuario:
             "bio": self.bio,
             "foto": self.foto,
             "link": self.link,
+            "banner": self.banner,
+            "color_perfil": self.color_perfil,
+            "tema": self.tema,
+            "paleta": self.paleta,
         }
+
+    def perfil_publico(self) -> dict[str, Any]:
+        """Datos que se pueden enviar a los clientes (sin el hash)."""
+        datos = self.a_dict()
+        del datos["hash_password"]
+        return datos
 
     @classmethod
     def desde_dict(cls, datos: dict[str, Any]) -> "Usuario":
@@ -65,6 +86,10 @@ class Usuario:
             bio=datos.get("bio", ""),
             foto=datos.get("foto", ""),
             link=datos.get("link", ""),
+            banner=datos.get("banner", ""),
+            color_perfil=datos.get("color_perfil", ""),
+            tema=datos.get("tema", "claro"),
+            paleta=datos.get("paleta", "bosque"),
         )
 
     def __repr__(self) -> str:
@@ -97,6 +122,10 @@ class Publicacion:
         fecha: datetime | str | None = None,
         likes: list[str] | None = None,
         extra: str = "",
+        reacciones: dict[str, list[str]] | None = None,
+        archivo: str = "",
+        nombre_archivo: str = "",
+        editado: bool = False,
     ) -> None:
         if not id or not id.strip():
             raise ValueError("El id de la publicación no puede estar vacío.")
@@ -120,6 +149,22 @@ class Publicacion:
             self.fecha = fecha
 
         self.likes = list(likes) if likes is not None else []
+        self.archivo = archivo or ""                # archivo adjunto guardado en el servidor
+        self.nombre_archivo = nombre_archivo or ""  # nombre original para mostrar
+        self.editado = bool(editado)
+        # Reacciones rápidas: emoji -> lista de usuarios que reaccionaron.
+        self.reacciones = {e: list(u) for e, u in (reacciones or {}).items() if u}
+
+    def alternar_reaccion(self, emoji: str, usuario: str) -> bool:
+        """Pone o quita la reacción. Devuelve True si quedó puesta."""
+        lista = self.reacciones.setdefault(emoji, [])
+        if usuario in lista:
+            lista.remove(usuario)
+            if not lista:
+                del self.reacciones[emoji]
+            return False
+        lista.append(usuario)
+        return True
 
     def agregar_like(self, usuario_id: str) -> None:
         """Agrega un like si el usuario aún no ha dado like."""
@@ -144,6 +189,10 @@ class Publicacion:
             else self.fecha,
             "likes": self.likes,
             "extra": self.extra,
+            "reacciones": self.reacciones,
+            "archivo": self.archivo,
+            "nombre_archivo": self.nombre_archivo,
+            "editado": self.editado,
         }
 
     @classmethod
@@ -164,6 +213,10 @@ class Publicacion:
             fecha=fecha,
             likes=datos.get("likes", []),
             extra=datos.get("extra", ""),
+            reacciones=datos.get("reacciones", {}),
+            archivo=datos.get("archivo", ""),
+            nombre_archivo=datos.get("nombre_archivo", ""),
+            editado=datos.get("editado", False),
         )
 
     def __repr__(self) -> str:
@@ -179,7 +232,16 @@ class Publicacion:
 
 
 class Mensaje:
-    """Representa un mensaje de chat entre dos usuarios."""
+    """Representa un mensaje de chat entre dos usuarios (o en la sala general).
+
+    tipo: texto, imagen, sticker, archivo, audio, encuesta o eliminado.
+    adjunto: nombre del archivo guardado en el servidor (imagen, archivo o audio).
+    responde_a: resumen del mensaje al que responde {id, emisor, texto, tipo}.
+    encuesta: {"pregunta", "opciones": [{"texto", "votos": [usuarios]}]}.
+    reacciones: emoji -> lista de usuarios.
+    """
+
+    TIPOS = ("texto", "imagen", "sticker", "archivo", "audio", "encuesta", "eliminado")
 
     def __init__(
         self,
@@ -187,6 +249,14 @@ class Mensaje:
         receptor: str,
         texto: str,
         fecha: datetime | str | None = None,
+        id: str = "",
+        tipo: str = "texto",
+        adjunto: str = "",
+        nombre_archivo: str = "",
+        editado: bool = False,
+        reacciones: dict[str, list[str]] | None = None,
+        responde_a: dict[str, Any] | None = None,
+        encuesta: dict[str, Any] | None = None,
     ) -> None:
         if not emisor or not emisor.strip():
             raise ValueError("El emisor del mensaje no puede estar vacío.")
@@ -198,6 +268,14 @@ class Mensaje:
         self.emisor = emisor.strip()
         self.receptor = receptor.strip()
         self.texto = texto
+        self.id = id or uuid.uuid4().hex
+        self.tipo = tipo if tipo in self.TIPOS else "texto"
+        self.adjunto = adjunto or ""
+        self.nombre_archivo = nombre_archivo or ""
+        self.editado = bool(editado)
+        self.reacciones = {e: list(u) for e, u in (reacciones or {}).items() if u}
+        self.responde_a = dict(responde_a) if responde_a else None
+        self.encuesta = encuesta or None
 
         if fecha is None:
             self.fecha = datetime.now()
@@ -215,7 +293,34 @@ class Mensaje:
             "fecha": self.fecha.isoformat()
             if isinstance(self.fecha, datetime)
             else self.fecha,
+            "id": self.id,
+            "tipo": self.tipo,
+            "adjunto": self.adjunto,
+            "nombre_archivo": self.nombre_archivo,
+            "editado": self.editado,
+            "reacciones": self.reacciones,
+            "responde_a": self.responde_a,
+            "encuesta": self.encuesta,
         }
+
+    def alternar_reaccion(self, emoji: str, usuario: str) -> None:
+        lista = self.reacciones.setdefault(emoji, [])
+        if usuario in lista:
+            lista.remove(usuario)
+            if not lista:
+                del self.reacciones[emoji]
+        else:
+            lista.append(usuario)
+
+    def votar(self, opcion: int, usuario: str) -> None:
+        """Un voto por persona: votar otra opción mueve el voto; la misma lo quita."""
+        opciones = self.encuesta["opciones"]
+        ya_estaba = usuario in opciones[opcion]["votos"]
+        for o in opciones:
+            if usuario in o["votos"]:
+                o["votos"].remove(usuario)
+        if not ya_estaba:
+            opciones[opcion]["votos"].append(usuario)
 
     @classmethod
     def desde_dict(cls, datos: dict[str, Any]) -> "Mensaje":
@@ -231,6 +336,14 @@ class Mensaje:
             receptor=datos["receptor"],
             texto=datos.get("texto", ""),
             fecha=fecha,
+            id=datos.get("id", ""),
+            tipo=datos.get("tipo", "texto"),
+            adjunto=datos.get("adjunto", ""),
+            nombre_archivo=datos.get("nombre_archivo", ""),
+            editado=datos.get("editado", False),
+            reacciones=datos.get("reacciones"),
+            responde_a=datos.get("responde_a"),
+            encuesta=datos.get("encuesta"),
         )
 
     def __repr__(self) -> str:

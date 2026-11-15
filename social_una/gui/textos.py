@@ -27,6 +27,8 @@ TITULOS_SECCION = {
     "Buscar": "Buscar personas",
     "Chat": "Mensajes",
     "Perfil": "Mi perfil",
+    "Personalizar": "Personaliza tu Social UNA",
+    "Juegos": "Juegos",
 }
 
 MURO_INVITACION = "Comparte algo con tus amigos"

@@ -63,7 +63,8 @@ class PestanaBuscar(tk.Frame):
                 else:
                     kw = {"acciones": [("Agregar amigo", lambda x=u["usuario"]: self._agregar(x),
                                         "primario")]}
-                FilaUsuario(t, u["usuario"], u["nombre"], **kw).pack(fill="x")
+                FilaUsuario(t, u["usuario"], u["nombre"], ruta_foto=self.app.ruta_foto(u),
+                            al_click=lambda x=u["usuario"]: self.app.ver_perfil(x), **kw).pack(fill="x")
         t = self._seccion("Sugerencias para ti")
         if not self.sugerencias:
             vacio(t, "Aún no hay sugerencias.\nAparecerán amigos de tus amigos.").pack()
@@ -71,6 +72,8 @@ class PestanaBuscar(tk.Frame):
             n = s.get("en_comun", 0)
             FilaUsuario(t, s["usuario"], s["nombre"],
                         f"{n} amigo{'s' if n != 1 else ''} en común",
+                        ruta_foto=self.app.ruta_foto(s),
+                        al_click=lambda x=s["usuario"]: self.app.ver_perfil(x),
                         acciones=[("Agregar amigo", lambda x=s["usuario"]: self._agregar(x),
                                    "secundario")]).pack(fill="x")
 

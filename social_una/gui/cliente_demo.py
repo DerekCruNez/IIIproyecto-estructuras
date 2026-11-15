@@ -41,12 +41,13 @@ class ClienteDemo:
         self.solicitudes = {"ana": {"maria"}, "luis": set(), "maria": set(), "pedro": set()}
         self.en_linea = {"luis"}
         self.publicaciones = []
+        self.apodos = {}
+        self.puntajes = {"serpiente": {"luis": 180, "pedro": 90}, "buscaminas": {"luis": 640}}
         self.chats = {}
         self._publicar_como("luis", "¡Hola a todos! Este es mi primer post en Social UNA.", None, "")
         self._publicar_como("ana", "Estudiando estructuras de datos 📚", None, "https://docs.python.org")
         self._publicar_como("pedro", "Alguien para el proyecto del martes?", None, "")
-        self.chats[SALA] = [{"emisor": "luis", "receptor": SALA, "texto": "Bienvenidos a la sala general",
-                             "fecha": _ahora()}]
+        self.chats[SALA] = [self._nuevo_mensaje("luis", SALA, "Bienvenidos a la sala general 👋")]
 
     # ---------------------------------------------------------------- sesión
     def conectar(self, ip, puerto):
@@ -76,7 +77,9 @@ class ClienteDemo:
     def _perfil(self, usuario):
         u = self.usuarios[usuario]
         return {"id": u["id"], "usuario": usuario, "nombre": u["nombre"], "bio": u["bio"],
-                "foto": u["foto"], "link": u["link"]}
+                "foto": u["foto"], "link": u["link"], "banner": u.get("banner", ""),
+                "color_perfil": u.get("color_perfil", ""), "tema": u.get("tema", "claro"),
+                "paleta": u.get("paleta", "bosque")}
 
     # ----------------------------------------------------------------- perfil
     def ver_perfil(self, usuario):
@@ -84,12 +87,19 @@ class ClienteDemo:
             return _error("Usuario no encontrado.")
         return _ok(usuario=self._perfil(usuario))
 
-    def editar_perfil(self, bio, ruta_foto, link):
+    def editar_perfil(self, bio, ruta_foto, link, ruta_banner=None, **apariencia):
         u = self.usuarios[self.actual]
         u["bio"], u["link"] = bio, link
-        if ruta_foto:
+        if ruta_foto is not None:
             u["foto"] = ruta_foto            # en la demo el "nombre" es la ruta completa
+        if ruta_banner is not None:
+            u["banner"] = ruta_banner
+        u.update({k: v for k, v in apariencia.items() if v is not None})
         return _ok(usuario=self._perfil(self.actual))
+
+    def guardar_apariencia(self, tema, paleta):
+        self.usuarios[self.actual].update(tema=tema, paleta=paleta)
+        return _ok()
 
     def ruta_imagen(self, nombre):
         return nombre if nombre and os.path.isfile(nombre) else None
@@ -122,9 +132,15 @@ class ClienteDemo:
             self.amigos[usuario].add(self.actual)
         return _ok()
 
+    def eliminar_amigo(self, usuario):
+        self.amigos[self.actual].discard(usuario)
+        self.amigos[usuario].discard(self.actual)
+        return _ok()
+
     def listar_amigos(self):
         return _ok(
-            amigos=[{"usuario": a, "nombre": self.usuarios[a]["nombre"], "en_linea": a in self.en_linea}
+            amigos=[{"usuario": a, "nombre": self.usuarios[a]["nombre"], "en_linea": a in self.en_linea,
+                     "apodo": self.apodos.get(self.actual, {}).get(a, "")}
                     for a in sorted(self.amigos[self.actual])],
             solicitudes=[{"usuario": s, "nombre": self.usuarios[s]["nombre"]}
                          for s in sorted(self.solicitudes[self.actual])])
@@ -142,11 +158,36 @@ class ClienteDemo:
     # ------------------------------------------------------------ publicaciones
     def _publicar_como(self, autor, texto, ruta_imagen, link):
         self.publicaciones.append({"id": self._sig, "autor": autor, "texto": texto,
-                                   "imagen": ruta_imagen or "", "link": link, "fecha": _ahora(), "likes": []})
+                                   "imagen": ruta_imagen or "", "link": link, "fecha": _ahora(), "likes": [],
+                                   "reacciones": {}})
         self._sig += 1
 
-    def publicar(self, texto, ruta_imagen, link):
+    def publicar(self, texto, ruta_imagen, link, ruta_archivo=None):
         self._publicar_como(self.actual, texto, ruta_imagen, link)
+        if ruta_archivo:
+            self.publicaciones[-1].update(archivo=ruta_archivo,
+                                          nombre_archivo=os.path.basename(ruta_archivo))
+        return _ok()
+
+    def _publicacion(self, id_publicacion):
+        return next((p for p in self.publicaciones if p["id"] == id_publicacion), None)
+
+    def editar_publicacion(self, id_publicacion, texto):
+        p = self._publicacion(id_publicacion)
+        if not p or p["autor"] != self.actual:
+            return _error("Solo puedes editar tus publicaciones.")
+        p.update(texto=texto, editado=True)
+        return _ok()
+
+    def eliminar_publicacion(self, id_publicacion):
+        p = self._publicacion(id_publicacion)
+        if not p or p["autor"] != self.actual:
+            return _error("Solo puedes eliminar tus publicaciones.")
+        self.publicaciones.remove(p)
+        return _ok()
+
+    def poner_apodo(self, amigo, apodo):
+        self.apodos.setdefault(self.actual, {})[amigo] = apodo.strip()
         return _ok()
 
     def obtener_muro(self):
@@ -164,6 +205,36 @@ class ClienteDemo:
                 return _ok()
         return _error("La publicación no existe.")
 
+    def reaccionar(self, id_publicacion, emoji):
+        for p in self.publicaciones:
+            if p["id"] == id_publicacion:
+                lista = p["reacciones"].setdefault(emoji, [])
+                if self.actual in lista:
+                    lista.remove(self.actual)
+                    if not lista:
+                        del p["reacciones"][emoji]
+                else:
+                    lista.append(self.actual)
+                return _ok()
+        return _error("La publicación no existe.")
+
+    # ------------------------------------------------------------------- juegos
+    def enviar_puntaje(self, juego, puntos):
+        tabla = self.puntajes.setdefault(juego, {})
+        tabla[self.actual] = max(tabla.get(self.actual, 0), puntos)
+        return _ok(mejor=tabla[self.actual])
+
+    def leaderboard(self, juego):
+        filas = [{"usuario": u, "nombre": self.usuarios[u]["nombre"], "foto": "", "puntos": p}
+                 for u, p in self.puntajes.get(juego, {}).items()]
+        return _ok(tabla=sorted(filas, key=lambda f: -f["puntos"]), jugando=[], duelos=[])
+
+    def jugando(self, juego=""):
+        return _ok()
+
+    def invitar_juego(self, amigo):
+        return _error("El 3 en raya en línea necesita el servidor real.")
+
     # --------------------------------------------------------------------- chat
     @staticmethod
     def _clave(a, b):
@@ -173,21 +244,55 @@ class ClienteDemo:
         clave = SALA if con == SALA else self._clave(self.actual, con)
         return _ok(mensajes=list(self.chats.get(clave, [])))
 
-    def enviar_chat(self, receptor, texto):
-        msg = {"emisor": self.actual, "receptor": receptor, "texto": texto, "fecha": _ahora()}
+    def _nuevo_mensaje(self, emisor, receptor, texto, tipo="texto", adjunto="", nombre="",
+                       responde_a=None, encuesta=None):
+        self._sig += 1
+        return {"id": str(self._sig), "emisor": emisor, "receptor": receptor, "texto": texto,
+                "fecha": _ahora(), "tipo": tipo, "adjunto": adjunto, "nombre_archivo": nombre,
+                "editado": False, "reacciones": {}, "responde_a": responde_a, "encuesta": encuesta}
+
+    def enviar_chat(self, receptor, texto, tipo="texto", ruta=None, responde_a=None, encuesta=None):
         clave = SALA if receptor == SALA else self._clave(self.actual, receptor)
-        self.chats.setdefault(clave, []).append(msg)
+        lista = self.chats.setdefault(clave, [])
+        cita = next(({"id": m["id"], "emisor": m["emisor"], "texto": m["texto"][:80],
+                      "tipo": m["tipo"]} for m in lista if m.get("id") == responde_a), None)
+        if encuesta:
+            encuesta = {"pregunta": encuesta["pregunta"],
+                        "opciones": [{"texto": o, "votos": []} for o in encuesta["opciones"]]}
+        msg = self._nuevo_mensaje(self.actual, receptor, texto, tipo, ruta or "",
+                                  os.path.basename(ruta or ""), cita, encuesta)
+        lista.append(msg)
         if receptor != SALA:
             # simula la respuesta en vivo de un amigo (llega por la cola, como con el servidor)
-            respuesta = {"tipo": "chat", "emisor": receptor, "receptor": self.actual,
-                         "texto": "¡Recibido! (respuesta automática de la demo)", "fecha": ""}
-
             def responder():
-                respuesta["fecha"] = _ahora()
-                self.chats.setdefault(clave, []).append(
-                    {k: respuesta[k] for k in ("emisor", "receptor", "texto", "fecha")})
-                self.cola.put(respuesta)
+                r = self._nuevo_mensaje(receptor, self.actual,
+                                        "¡Recibido! 😄 (respuesta automática de la demo)")
+                lista.append(r)
+                self.cola.put({**r, "mensaje": r, "tipo": "chat"})
             t = threading.Timer(1.5, responder)
             t.daemon = True
             t.start()
         return _ok(mensaje=msg)
+
+    def actualizar_mensaje(self, con, id_mensaje, accion, valor=None):
+        clave = SALA if con == SALA else self._clave(self.actual, con)
+        for m in self.chats.get(clave, []):
+            if m.get("id") == id_mensaje:
+                if accion == "editar":
+                    m["texto"], m["editado"] = valor, True
+                elif accion == "eliminar":
+                    m.update(tipo="eliminado", texto="", adjunto="", encuesta=None, reacciones={})
+                elif accion == "reaccionar":
+                    lista = m["reacciones"].setdefault(valor, [])
+                    lista.remove(self.actual) if self.actual in lista else lista.append(self.actual)
+                    if not lista:
+                        del m["reacciones"][valor]
+                elif accion == "votar":
+                    for i, o in enumerate(m["encuesta"]["opciones"]):
+                        ya = self.actual in o["votos"]
+                        if ya:
+                            o["votos"].remove(self.actual)
+                        elif i == valor:
+                            o["votos"].append(self.actual)
+                return _ok(mensaje=m)
+        return _error("El mensaje no existe.")

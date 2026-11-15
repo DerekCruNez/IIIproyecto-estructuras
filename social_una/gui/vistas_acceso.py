@@ -110,9 +110,9 @@ class VistaConexion(_Acceso):
         self.campo("puerto", "Puerto", valor="5000")
         self.boton("Conectar", self.enviar)
         if app.modo_demo:
-            nota = tk.Frame(self.centro, bg="#fef3c7", padx=12, pady=10)
+            nota = tk.Frame(self.centro, bg=E.AVISO_FONDO, padx=12, pady=10)
             nota.pack(fill="x", pady=(18, 0))
-            tk.Label(nota, bg="#fef3c7", fg="#92400e", font=E.F_PEQ, justify="left", anchor="w",
+            tk.Label(nota, bg=E.AVISO_FONDO, fg=E.AVISO_TEXTO, font=E.F_PEQ, justify="left", anchor="w",
                      text="Modo demostración: no hay servidor real.\n"
                           "Cualquier IP funciona. Usuarios: ana, luis, maria\ny pedro (clave 1234).").pack(anchor="w")
         primer.focus()
@@ -156,8 +156,7 @@ class VistaLogin(_Acceso):
             return
         resp = self.app.cliente.login(usuario, clave)
         if respuesta_ok(resp, "Usuario o contraseña incorrectos."):
-            self.app.perfil = resp["usuario"]
-            self.app.mostrar_principal()
+            self.app.entrar(resp["usuario"])
 
 
 class VistaRegistro(_Acceso):

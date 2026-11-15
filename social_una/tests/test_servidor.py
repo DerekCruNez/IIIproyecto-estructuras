@@ -11,7 +11,16 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from almacen import Almacen
-from protocolo import enviar_mensaje, recibir_mensaje
+from protocolo import enviar_mensaje, recibir_mensaje as _recibir_mensaje
+
+
+def recibir_mensaje(sock):
+    """Como protocolo.recibir_mensaje, pero salta los avisos informativos
+    (amigo en línea, nueva publicación) que no son parte de estas pruebas."""
+    while True:
+        mensaje = _recibir_mensaje(sock)
+        if not (mensaje and mensaje.get("evento") in ("en_linea", "nueva_publicacion")):
+            return mensaje
 from servidor import Servidor
 
 
@@ -143,7 +152,7 @@ class PruebasServidor(unittest.TestCase):
         self.assertEqual(busqueda["datos"]["usuarios"][0]["usuario"], "cami")
         self.assertTrue(self.pedir(ana, "enviar_solicitud", {"destino": "bob"})["ok"])
         self.assertEqual(recibir_mensaje(bob)["datos"]["origen"], "ana")
-        self.assertEqual(self.pedir(bob, "listar_solicitudes")["datos"]["solicitudes"], ["ana"])
+        self.assertEqual([u["usuario"] for u in self.pedir(bob, "listar_solicitudes")["datos"]["solicitudes"]], ["ana"])
         self.assertTrue(self.pedir(bob, "responder_solicitud", {
             "origen": "ana", "aceptar": False
         })["ok"])
@@ -152,7 +161,7 @@ class PruebasServidor(unittest.TestCase):
         self.assertTrue(self.pedir(bob, "responder_solicitud", {
             "origen": "ana", "aceptar": True
         })["ok"])
-        self.assertEqual(self.pedir(ana, "listar_amigos")["datos"]["amigos"], ["bob"])
+        self.assertEqual([u["usuario"] for u in self.pedir(ana, "listar_amigos")["datos"]["amigos"]], ["bob"])
         self.assertTrue(self.pedir(bob, "enviar_solicitud", {"destino": "cami"})["ok"])
         recibir_mensaje(cami)
         self.assertTrue(self.pedir(cami, "responder_solicitud", {

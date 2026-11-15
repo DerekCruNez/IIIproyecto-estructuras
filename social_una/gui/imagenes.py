@@ -1,21 +1,27 @@
-"""Imágenes con Pillow: miniaturas para publicaciones y avatares redondos."""
+"""Imágenes con Pillow: miniaturas, avatares redondos (también GIF animados) y banners."""
 import os
 import random
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageTk
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageSequence, ImageTk
+
+from gui import estilo as E
+
+MAX_CUADROS_GIF = 60   # límite de cuadros animados por GIF (memoria y fluidez)
 
 _cache = {}
 _COLORES = ["#0f766e", "#b45309", "#be123c", "#6d28d9", "#0369a1", "#4d7c0f", "#c2410c", "#a21caf"]
 
 
-def miniatura(ruta, caja=(520, 340)):
-    """PhotoImage reducida para caber en `caja`, o None si no se puede abrir."""
+def miniatura(ruta, caja=(520, 340), transparente=False):
+    """PhotoImage reducida para caber en `caja`, o None si no se puede abrir.
+
+    transparente=True conserva el canal alfa (stickers)."""
     if not ruta or not os.path.isfile(ruta):
         return None
-    clave = ("mini", ruta, caja, os.path.getmtime(ruta))
+    clave = ("mini", ruta, caja, os.path.getmtime(ruta), transparente)
     if clave not in _cache:
         try:
             with Image.open(ruta) as img:
-                img = ImageOps.exif_transpose(img).convert("RGB")
+                img = ImageOps.exif_transpose(img).convert("RGBA" if transparente else "RGB")
                 img.thumbnail(caja)
                 _cache[clave] = ImageTk.PhotoImage(img)
         except Exception:
@@ -67,11 +73,103 @@ def avatar(nombre, usuario, ruta=None, lado=40):
         d = ImageDraw.Draw(base)
         d.text((grande / 2, grande / 2), _iniciales(nombre), fill="white",
                font=_fuente(int(grande * 0.4)), anchor="mm")
+    _cache[clave] = ImageTk.PhotoImage(_circulo(base, lado))
+    return _cache[clave]
+
+
+def _circulo(img, lado):
+    """Recorta `img` (cuadrada) en un círculo de `lado` px con bordes suaves."""
+    grande = img.size[0]
     mascara = Image.new("L", (grande, grande), 0)
     ImageDraw.Draw(mascara).ellipse((0, 0, grande - 1, grande - 1), fill=255)
     salida = Image.new("RGBA", (grande, grande), (0, 0, 0, 0))
-    salida.paste(base, (0, 0), mascara)
-    _cache[clave] = ImageTk.PhotoImage(salida.resize((lado, lado), Image.LANCZOS))
+    salida.paste(img, (0, 0), mascara)
+    return salida.resize((lado, lado), Image.LANCZOS)
+
+
+def cuadros_avatar(ruta, lado):
+    """Cuadros de un GIF animado como avatar redondo: ([PhotoImage], [ms]) o None.
+
+    Restricciones: como máximo MAX_CUADROS_GIF cuadros y 20 ms mínimos por cuadro,
+    para que un GIF pesado no congele la interfaz.
+    """
+    if not ruta or not os.path.isfile(ruta):
+        return None
+    clave = ("gif", ruta, lado, os.path.getmtime(ruta))
+    if clave in _cache:
+        return _cache[clave]
+    resultado = None
+    try:
+        with Image.open(ruta) as img:
+            if getattr(img, "is_animated", False):
+                cuadros, tiempos = [], []
+                for i, cuadro in enumerate(ImageSequence.Iterator(img)):
+                    if i >= MAX_CUADROS_GIF:
+                        break
+                    base = ImageOps.fit(cuadro.convert("RGB"), (lado * 2, lado * 2))
+                    cuadros.append(ImageTk.PhotoImage(_circulo(base, lado)))
+                    tiempos.append(max(20, int(cuadro.info.get("duration", 80) or 80)))
+                resultado = (cuadros, tiempos)
+    except Exception:
+        resultado = None
+    _cache[clave] = resultado
+    return resultado
+
+
+def cuadros_imagen(ruta, caja=(280, 220)):
+    """Cuadros de un GIF animado reducidos a `caja`: ([PhotoImage], [ms]) o None."""
+    if not ruta or not os.path.isfile(ruta):
+        return None
+    clave = ("gifimg", ruta, caja, os.path.getmtime(ruta))
+    if clave in _cache:
+        return _cache[clave]
+    resultado = None
+    try:
+        with Image.open(ruta) as img:
+            if getattr(img, "is_animated", False):
+                cuadros, tiempos = [], []
+                for i, cuadro in enumerate(ImageSequence.Iterator(img)):
+                    if i >= MAX_CUADROS_GIF:
+                        break
+                    c = cuadro.convert("RGBA")
+                    c.thumbnail(caja)
+                    cuadros.append(ImageTk.PhotoImage(c))
+                    tiempos.append(max(20, int(cuadro.info.get("duration", 80) or 80)))
+                resultado = (cuadros, tiempos)
+    except Exception:
+        resultado = None
+    _cache[clave] = resultado
+    return resultado
+
+
+def banner(ruta, color, ancho, alto):
+    """Banner del perfil: la imagen recortada al tamaño, o un degradado del color."""
+    mtime = os.path.getmtime(ruta) if ruta and os.path.isfile(ruta) else 0
+    color = color or E.ACENTO
+    clave = ("banner", ruta, mtime, color, ancho, alto)
+    if clave in _cache:
+        return _cache[clave]
+    img = None
+    if mtime:
+        try:
+            with Image.open(ruta) as original:
+                img = ImageOps.fit(ImageOps.exif_transpose(original).convert("RGB"), (ancho, alto))
+        except Exception:
+            img = None
+    if img is None:
+        # degradado diagonal del color hacia una versión más oscura y algo de brillo
+        a, b = _hex(E.mezclar(color, "#ffffff", 0.12)), _hex(E.mezclar(color, "#000000", 0.35))
+        img = Image.new("RGB", (ancho, alto))
+        d = ImageDraw.Draw(img)
+        for x in range(ancho):
+            t = x / max(1, ancho - 1)
+            d.line([(x, 0), (x, alto)], fill=tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3)))
+        brillo = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
+        ImageDraw.Draw(brillo).ellipse((ancho * 0.55, -alto, ancho * 1.2, alto * 1.1),
+                                       fill=(255, 255, 255, 40))
+        img = Image.alpha_composite(img.convert("RGBA"),
+                                    brillo.filter(ImageFilter.GaussianBlur(30))).convert("RGB")
+    _cache[clave] = ImageTk.PhotoImage(img)
     return _cache[clave]
 
 
@@ -83,14 +181,14 @@ def _hex(color, alpha=255):
 
 def logo(lado=64):
     """Logo de Social UNA: tres nodos conectados (un grafo de amistades) sobre un cuadro redondeado."""
-    clave = ("logo", lado)
+    clave = ("logo", lado, E.ACENTO, E.MARINO, E.DESTACADO)
     if clave in _cache:
         return _cache[clave]
     g = lado * 4
     # fondo con degradado vertical verde azulado
     degradado = Image.new("RGBA", (g, g))
     d = ImageDraw.Draw(degradado)
-    arriba, abajo = _hex("#14a39a"), _hex("#0a4f55")
+    arriba, abajo = _hex(E.mezclar(E.ACENTO, "#ffffff", 0.18)), _hex(E.mezclar(E.ACENTO, E.MARINO, 0.55))
     for y in range(g):
         t = y / (g - 1)
         d.line([(0, y), (g, y)], fill=tuple(int(arriba[i] + (abajo[i] - arriba[i]) * t) for i in range(3)) + (255,))
@@ -104,7 +202,7 @@ def logo(lado=64):
     grosor = int(g * 0.045)
     for p, q in ((A, B), (A, C), (B, C)):
         d.line([p, q], fill=(255, 255, 255, 235), width=grosor)
-    for (x, y), r, color in ((A, 0.095, "#ffffff"), (B, 0.095, "#ffffff"), (C, 0.125, "#f5a524")):
+    for (x, y), r, color in ((A, 0.095, "#ffffff"), (B, 0.095, "#ffffff"), (C, 0.125, E.DESTACADO)):
         r *= g
         d.ellipse((x - r, y - r, x + r, y + r), fill=_hex(color))
     _cache[clave] = ImageTk.PhotoImage(img.resize((lado, lado), Image.LANCZOS))
@@ -113,12 +211,12 @@ def logo(lado=64):
 
 def constelacion(ancho=420, alto=1100):
     """Fondo decorativo del panel de marca: red de nodos conectados sobre verde azulado."""
-    clave = ("constelacion", ancho, alto)
+    clave = ("constelacion", ancho, alto, E.MARINO, E.ACENTO, E.DESTACADO)
     if clave in _cache:
         return _cache[clave]
     base = Image.new("RGBA", (ancho, alto))
     d = ImageDraw.Draw(base)
-    arriba, abajo = _hex("#0d3a40"), _hex("#071d21")
+    arriba, abajo = _hex(E.mezclar(E.MARINO, E.ACENTO, 0.2)), _hex(E.mezclar(E.MARINO, "#000000", 0.3))
     for y in range(alto):
         t = y / (alto - 1)
         d.line([(0, y), (ancho, y)], fill=tuple(int(arriba[i] + (abajo[i] - arriba[i]) * t) for i in range(3)) + (255,))
@@ -126,8 +224,8 @@ def constelacion(ancho=420, alto=1100):
     # resplandores suaves
     brillo = Image.new("RGBA", (ancho, alto), (0, 0, 0, 0))
     bd = ImageDraw.Draw(brillo)
-    bd.ellipse((-140, -120, 300, 320), fill=_hex("#14b8a6", 70))
-    bd.ellipse((140, alto - 360, 560, alto + 60), fill=_hex("#f5a524", 38))
+    bd.ellipse((-140, -120, 300, 320), fill=_hex(E.mezclar(E.ACENTO, "#ffffff", 0.25), 70))
+    bd.ellipse((140, alto - 360, 560, alto + 60), fill=_hex(E.DESTACADO, 38))
     base = Image.alpha_composite(base, brillo.filter(ImageFilter.GaussianBlur(70)))
 
     # red de nodos (semilla fija: siempre el mismo dibujo)
@@ -142,7 +240,7 @@ def constelacion(ancho=420, alto=1100):
                 rd.line([(x1, y1), (x2, y2)], fill=(255, 255, 255, int(46 * (1 - dist / 150)) + 8), width=1)
     for n, (x, y) in enumerate(puntos):
         r = azar.choice((2, 3, 3, 4))
-        color = _hex("#f5a524", 150) if n % 9 == 0 else (255, 255, 255, 70)
+        color = _hex(E.DESTACADO, 150) if n % 9 == 0 else (255, 255, 255, 70)
         rd.ellipse((x - r, y - r, x + r, y + r), fill=color)
     base = Image.alpha_composite(base, red)
     _cache[clave] = ImageTk.PhotoImage(base.convert("RGB"))

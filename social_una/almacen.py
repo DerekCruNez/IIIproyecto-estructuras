@@ -14,11 +14,9 @@ Estructuras de datos obligatorias:
 import hashlib
 import json
 import os
-import shutil
 import tempfile
 import threading
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +39,10 @@ class Almacen:
         self.amistades: dict[str, list[str]] = {}
         self.solicitudes: dict[str, list[str]] = {}
         self.chats: dict[str, list[Mensaje]] = {}
+        # apodos que cada usuario le pone a sus amigos: usuario -> {amigo: apodo}
+        self.apodos: dict[str, dict[str, str]] = {}
+        # puntajes de los juegos: juego -> {usuario: puntos}
+        self.puntajes: dict[str, dict[str, int]] = {}
         self.lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -61,6 +63,8 @@ class Almacen:
         self.solicitudes = self._cargar_json_dict("solicitudes.json", {})
         self.publicaciones = self._cargar_publicaciones()
         self.chats = self._cargar_chats()
+        self.apodos = self._cargar_json_dict("apodos.json", {})
+        self.puntajes = self._cargar_json_dict("puntajes.json", {})
 
     def _ruta(self, nombre: str) -> Path:
         return self.carpeta_datos / nombre
@@ -143,6 +147,8 @@ class Almacen:
                                           [p.a_dict() for p in self.publicaciones])
             self._guardar_archivo_atomico("amistades.json", self.amistades)
             self._guardar_archivo_atomico("solicitudes.json", self.solicitudes)
+            self._guardar_archivo_atomico("apodos.json", self.apodos)
+            self._guardar_archivo_atomico("puntajes.json", self.puntajes)
             self._guardar_archivo_atomico("chats.json",
                                           {k: [m.a_dict() for m in v]
                                            for k, v in self.chats.items()})
@@ -156,10 +162,8 @@ class Almacen:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(datos, f, ensure_ascii=False, indent=2)
-            # En Windows, eliminar el destino antes de reemplazar evita
-            # errores de acceso denegado cuando el archivo ya existe.
-            if ruta_final.exists():
-                ruta_final.unlink()
+            # os.replace reemplaza de forma atómica también en Windows; no se
+            # borra antes el destino para no perder el archivo si hay un corte.
             os.replace(ruta_temp, ruta_final)
         except Exception:
             try:
@@ -174,7 +178,6 @@ class Almacen:
     @staticmethod
     def hash_clave(clave: str) -> str:
         """Devuelve el hash SHA-256 de una contraseña."""
-        import hashlib
         return hashlib.sha256(clave.encode("utf-8")).hexdigest()
 
     def _buscar_usuario_por_nombre(self, usuario: str) -> Usuario | None:
@@ -189,8 +192,15 @@ class Almacen:
                 return i
         return None
 
+    SALA = "#general"
+
     def _clave_chat(self, a: str, b: str) -> str:
-        """Clave consistente para una conversación entre dos usuarios."""
+        """Clave consistente para una conversación entre dos usuarios.
+
+        La sala general usa siempre la misma clave.
+        """
+        if self.SALA in (a, b):
+            return self.SALA
         ordenados = sorted([a, b])
         return f"{ordenados[0]}:{ordenados[1]}"
 
@@ -212,6 +222,8 @@ class Almacen:
         usuario = usuario.strip()
         if self._buscar_usuario_por_nombre(usuario) is not None:
             return False, "El usuario ya existe."
+        if any(u.id == id.strip() for u in self.usuarios):
+            return False, "Ese ID ya está registrado."
 
         nuevo = Usuario(
             id=id.strip(),
@@ -234,38 +246,33 @@ class Almacen:
         esperado = self.hash_clave(clave)
         if u.hash_password != esperado:
             return False, "Clave incorrecta."
-        return True, {
-            "id": u.id,
-            "nombre": u.nombre,
-            "usuario": u.usuario,
-            "bio": u.bio,
-            "foto": u.foto,
-            "link": u.link,
-        }
+        return True, u.perfil_publico()
 
     def obtener_perfil(self, usuario: str) -> tuple[bool, Any]:
         """Devuelve el perfil publico de un usuario (sin hash de clave)."""
         u = self._buscar_usuario_por_nombre(usuario)
         if u is None:
             return False, "Usuario no encontrado."
-        return True, {
-            "id": u.id,
-            "nombre": u.nombre,
-            "usuario": u.usuario,
-            "bio": u.bio,
-            "foto": u.foto,
-            "link": u.link,
-        }
+        return True, u.perfil_publico()
 
-    def editar_perfil(self, usuario: str, bio: str, foto: str,
-                      link: str) -> tuple[bool, Any]:
-        """Edita los campos opcionales del perfil de un usuario."""
+    CAMPOS_PERFIL = ("bio", "foto", "link", "banner", "color_perfil", "tema", "paleta")
+
+    def editar_perfil(self, usuario: str, bio: str | None = None,
+                      foto: str | None = None, link: str | None = None,
+                      **extras: str | None) -> tuple[bool, Any]:
+        """Edita los campos del perfil. Un campo en None se deja como está.
+
+        extras acepta banner, color_perfil, tema y paleta.
+        """
         u = self._buscar_usuario_por_nombre(usuario)
         if u is None:
             return False, "Usuario no encontrado."
-        u.bio = bio or ""
-        u.foto = foto or ""
-        u.link = link or ""
+        cambios = {"bio": bio, "foto": foto, "link": link, **extras}
+        for campo, valor in cambios.items():
+            if campo not in self.CAMPOS_PERFIL:
+                return False, f"Campo de perfil desconocido: {campo}"
+            if valor is not None:
+                setattr(u, campo, valor)
         self.guardar_todo()
         return True, "Perfil actualizado."
 
@@ -275,14 +282,7 @@ class Almacen:
         resultados = []
         for u in self.usuarios:
             if texto_lower in u.usuario.lower() or texto_lower in u.nombre.lower():
-                resultados.append({
-                    "id": u.id,
-                    "nombre": u.nombre,
-                    "usuario": u.usuario,
-                    "bio": u.bio,
-                    "foto": u.foto,
-                    "link": u.link,
-                })
+                resultados.append(u.perfil_publico())
         return True, resultados
 
     # ------------------------------------------------------------------
@@ -325,6 +325,10 @@ class Almacen:
         if destino in self.amistades.get(origen, []):
             return False, "Ya son amigos."
 
+        # Si destino ya le había enviado una solicitud a origen, se aceptan.
+        if origen in self.solicitudes and destino in self.solicitudes[origen]:
+            return self.responder_solicitud(origen, destino, True)
+
         # Solicitud ya pendiente
         pendientes = self.solicitudes.get(destino, [])
         if origen in pendientes:
@@ -363,6 +367,11 @@ class Almacen:
         """Lista las solicitudes de amistad pendientes recibidas por un usuario."""
         return True, list(self.solicitudes.get(usuario, []))
 
+    def listar_solicitudes_enviadas(self, usuario: str) -> tuple[bool, Any]:
+        """Usuarios a los que `usuario` les envió una solicitud aún pendiente."""
+        return True, [destino for destino, origenes in self.solicitudes.items()
+                      if usuario in origenes]
+
     def listar_amigos(self, usuario: str) -> tuple[bool, Any]:
         """Lista los amigos de un usuario."""
         return True, list(self.amistades.get(usuario, []))
@@ -386,15 +395,16 @@ class Almacen:
     # Publicaciones y muro
     # ------------------------------------------------------------------
     def crear_publicacion(self, autor: str, texto: str, imagen: str,
-                          link: str, extra: str) -> tuple[bool, Any]:
+                          link: str, extra: str, archivo: str = "",
+                          nombre_archivo: str = "") -> tuple[bool, Any]:
         """Crea una nueva publicación.
 
         Retorna (True, Publicacion) o (False, error).
         """
         if not autor or not autor.strip():
             return False, "El autor es obligatorio."
-        if texto is None or texto == "":
-            return False, "El texto no puede estar vacio."
+        if not (texto or "").strip() and not imagen and not link and not archivo:
+            return False, "La publicación necesita texto, imagen o link."
 
         if self._buscar_usuario_por_nombre(autor) is None:
             return False, "El autor no existe."
@@ -402,10 +412,12 @@ class Almacen:
         nueva = Publicacion(
             id=str(uuid.uuid4()),
             autor=autor.strip(),
-            texto=texto,
+            texto=texto or "",
             imagen=imagen or "",
             link=link or "",
             extra=extra or "",
+            archivo=archivo or "",
+            nombre_archivo=nombre_archivo or "",
         )
         self.publicaciones.append(nueva)
         self.guardar_todo()
@@ -450,21 +462,109 @@ class Almacen:
             self.guardar_todo()
             return True, "Like agregado."
 
+    def editar_publicacion(self, id_publicacion: str, usuario: str,
+                           texto: str) -> tuple[bool, Any]:
+        """Cambia el texto de una publicación. Solo puede hacerlo su autor."""
+        p = self._buscar_publicacion_por_id(id_publicacion)
+        if p is None:
+            return False, "Publicacion no encontrada."
+        if p.autor != usuario:
+            return False, "Solo puedes editar tus publicaciones."
+        if not (texto or "").strip() and not p.imagen and not p.link and not p.archivo:
+            return False, "La publicación necesita texto, imagen o link."
+        p.texto, p.editado = texto, True
+        self.guardar_todo()
+        return True, p
+
+    def eliminar_publicacion(self, id_publicacion: str, usuario: str) -> tuple[bool, Any]:
+        """Borra una publicación del muro. Solo puede hacerlo su autor."""
+        p = self._buscar_publicacion_por_id(id_publicacion)
+        if p is None:
+            return False, "Publicacion no encontrada."
+        if p.autor != usuario:
+            return False, "Solo puedes eliminar tus publicaciones."
+        self.publicaciones.remove(p)
+        self.guardar_todo()
+        return True, "Publicación eliminada."
+
+    def poner_apodo(self, usuario: str, amigo: str, apodo: str) -> tuple[bool, Any]:
+        """Apodo que `usuario` ve para su amigo. Vacío = quitar el apodo."""
+        if amigo not in self.amistades.get(usuario, []):
+            return False, "Solo puedes ponerles apodo a tus amigos."
+        apodo = (apodo or "").strip()
+        mios = self.apodos.setdefault(usuario, {})
+        if apodo:
+            mios[amigo] = apodo
+        else:
+            mios.pop(amigo, None)
+        self.guardar_todo()
+        return True, "Apodo guardado." if apodo else "Apodo quitado."
+
+    # ------------------------------------------------------------------
+    # Juegos
+    # ------------------------------------------------------------------
+    JUEGOS = {"serpiente": "max", "buscaminas": "max", "tres_en_raya": "sumar"}
+
+    def registrar_puntaje(self, juego: str, usuario: str, puntos: int) -> tuple[bool, Any]:
+        """Serpiente y buscaminas guardan el mejor puntaje; 3 en raya los acumula."""
+        if juego not in self.JUEGOS:
+            return False, "Juego desconocido."
+        tabla = self.puntajes.setdefault(juego, {})
+        actual = tabla.get(usuario, 0)
+        tabla[usuario] = actual + puntos if self.JUEGOS[juego] == "sumar" else max(actual, puntos)
+        self.guardar_todo()
+        return True, tabla[usuario]
+
+    def leaderboard(self, juego: str, limite: int = 10) -> tuple[bool, Any]:
+        """Lista ordenada de mayor a menor: [{usuario, nombre, foto, puntos}]."""
+        if juego not in self.JUEGOS:
+            return False, "Juego desconocido."
+        filas = []
+        for usuario, puntos in self.puntajes.get(juego, {}).items():
+            u = self._buscar_usuario_por_nombre(usuario)
+            if u is not None and puntos > 0:
+                filas.append({"usuario": usuario, "nombre": u.nombre, "foto": u.foto,
+                              "puntos": puntos})
+        filas.sort(key=lambda f: f["puntos"], reverse=True)
+        return True, filas[:limite]
+
+    def reaccionar(self, id_publicacion: str, usuario: str,
+                   emoji: str) -> tuple[bool, Any]:
+        """Pone o quita una reacción rápida (toggle)."""
+        p = self._buscar_publicacion_por_id(id_publicacion)
+        if p is None:
+            return False, "Publicacion no encontrada."
+        puesta = p.alternar_reaccion(emoji, usuario)
+        self.guardar_todo()
+        return True, "Reacción agregada." if puesta else "Reacción eliminada."
+
     # ------------------------------------------------------------------
     # Chat
     # ------------------------------------------------------------------
-    def guardar_chat(self, emisor: str, receptor: str, texto: str
-                     ) -> tuple[bool, Any]:
-        """Guarda un mensaje de chat en la conversación correspondiente."""
+    def guardar_chat(self, emisor: str, receptor: str, texto: str,
+                     **extra: Any) -> tuple[bool, Any]:
+        """Guarda un mensaje de chat en la conversación correspondiente.
+
+        extra: tipo, adjunto, nombre_archivo, responde_a (id) y encuesta.
+        """
         if not emisor or not receptor:
             return False, "Emisor y receptor son obligatorios."
-        if texto is None or texto == "":
+        tipo = extra.get("tipo", "texto")
+        if tipo == "texto" and not (texto or "").strip():
             return False, "El texto no puede estar vacio."
 
+        id_respuesta = extra.pop("responde_a", None)
+        if id_respuesta:
+            original = self._buscar_mensaje(emisor, receptor, id_respuesta)
+            if original is None:
+                return False, "El mensaje al que respondes no existe."
+            extra["responde_a"] = {"id": original.id, "emisor": original.emisor,
+                                   "texto": original.texto[:80], "tipo": original.tipo}
         mensaje = Mensaje(
             emisor=emisor.strip(),
             receptor=receptor.strip(),
-            texto=texto,
+            texto=texto or "",
+            **extra,
         )
 
         clave = self._clave_chat(emisor, receptor)
@@ -473,6 +573,45 @@ class Almacen:
         self.chats[clave].append(mensaje)
         self.guardar_todo()
         return True, "Mensaje guardado."
+
+    def _buscar_mensaje(self, a: str, b: str, id_mensaje: str) -> Mensaje | None:
+        for m in self.chats.get(self._clave_chat(a, b), []):
+            if m.id == id_mensaje:
+                return m
+        return None
+
+    def actualizar_mensaje(self, usuario: str, con: str, id_mensaje: str,
+                           accion: str, valor: Any = None) -> tuple[bool, Any]:
+        """Edita, elimina, reacciona o vota en un mensaje.
+
+        Solo el autor puede editar (texto) o eliminar. Devuelve el mensaje.
+        """
+        m = self._buscar_mensaje(usuario, con, id_mensaje)
+        if m is None:
+            return False, "El mensaje no existe."
+        if accion in ("editar", "eliminar") and m.emisor != usuario:
+            return False, "Solo puedes cambiar tus propios mensajes."
+        if m.tipo == "eliminado":
+            return False, "El mensaje fue eliminado."
+        if accion == "editar":
+            if m.tipo != "texto":
+                return False, "Solo se pueden editar mensajes de texto."
+            if not (valor or "").strip():
+                return False, "El texto no puede estar vacio."
+            m.texto, m.editado = valor, True
+        elif accion == "eliminar":
+            m.tipo, m.texto, m.adjunto, m.encuesta, m.reacciones = "eliminado", "", "", None, {}
+        elif accion == "reaccionar":
+            m.alternar_reaccion(valor, usuario)
+        elif accion == "votar":
+            if m.tipo != "encuesta" or not isinstance(valor, int) \
+                    or not 0 <= valor < len(m.encuesta["opciones"]):
+                return False, "Opción de encuesta inválida."
+            m.votar(valor, usuario)
+        else:
+            return False, f"Acción desconocida: {accion}"
+        self.guardar_todo()
+        return True, m.a_dict()
 
     def obtener_chat(self, a: str, b: str) -> tuple[bool, Any]:
         """Devuelve el historial de conversación entre dos usuarios."""
@@ -516,13 +655,8 @@ class Almacen:
         for nombre_usuario, _ in sugeridas_ordenadas:
             u = self._buscar_usuario_por_nombre(nombre_usuario)
             if u is not None:
-                resultado.append({
-                    "id": u.id,
-                    "nombre": u.nombre,
-                    "usuario": u.usuario,
-                    "bio": u.bio,
-                    "foto": u.foto,
-                    "link": u.link,
-                })
+                perfil = u.perfil_publico()
+                perfil["en_comun"] = sugerencias[nombre_usuario]
+                resultado.append(perfil)
 
         return True, resultado
