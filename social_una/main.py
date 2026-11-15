@@ -1,23 +1,37 @@
-"""Punto de entrada de la aplicación Social UNA."""
+"""Social UNA - punto de entrada de la interfaz gráfica.
 
-import tkinter as tk
+Uso:
+    python main.py          -> usa cliente.py (Daniel) si existe; si no, modo demostración
+    python main.py --demo   -> fuerza el modo demostración (sin servidor)
+"""
+import sys
+from tkinter import messagebox, Tk
 
-from gui.estilo import aplicar_estilo
-from gui.ventana_conexion import VentanaConexion
-from cliente import ClienteSocial
+
+def crear_cliente(forzar_demo=False):
+    """Devuelve (cliente, es_demo)."""
+    if not forzar_demo:
+        try:
+            from cliente import ClienteSocial
+            return ClienteSocial(), False
+        except ImportError:
+            pass
+    from gui.cliente_demo import ClienteDemo
+    return ClienteDemo(), True
 
 
-def main() -> None:
-    """Inicia la aplicación cliente."""
-    root = tk.Tk()
-    root.title("Social UNA")
-    root.geometry("900x600")
-    aplicar_estilo(root)
+def main():
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        raiz = Tk()
+        raiz.withdraw()
+        messagebox.showerror("Falta Pillow", "Instala Pillow con:\n\npip install pillow")
+        return
 
-    cliente = ClienteSocial()
-    VentanaConexion(root, cliente)
-
-    root.mainloop()
+    from gui.app import App
+    cliente, demo = crear_cliente("--demo" in sys.argv)
+    App(cliente, demo).mainloop()
 
 
 if __name__ == "__main__":
