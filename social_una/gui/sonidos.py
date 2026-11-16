@@ -10,7 +10,9 @@ import math
 import os
 import struct
 import sys
+import threading
 import wave
+from array import array
 
 CARPETA = os.path.join(os.path.expanduser("~"), ".social_una")
 ARCHIVO_PREFS = os.path.join(CARPETA, "preferencias.json")
@@ -23,17 +25,30 @@ if ES_WINDOWS:
     import ctypes
     import winsound
 
+# sounddevice es opcional: sin él se usan el micrófono y los altavoces predeterminados.
+ERROR_AUDIO = ""     # por qué no se pudo cargar sounddevice (se muestra en Personalizar)
+try:
+    import sounddevice as sd
+    HAY_SELECCION_AUDIO = True
+except Exception as _exc:       # no instalado, o sin PortAudio
+    sd = None
+    HAY_SELECCION_AUDIO = False
+    ERROR_AUDIO = f"{type(_exc).__name__}: {_exc}"
+
 
 # ------------------------------------------------------------- preferencias
-_PREFS_DEFECTO = {"sonido": True, "tono": "Campanita", "tono_propio": "", "giphy_key": ""}
+_PREFS_DEFECTO = {"sonido": True, "tono": "Campanita", "tono_propio": "", "giphy_key": "",
+                  "audio_entrada": "", "audio_salida": ""}   # "" = predeterminado del sistema
 
 
 def cargar_prefs():
     try:
         with open(ARCHIVO_PREFS, encoding="utf-8") as f:
-            return {**_PREFS_DEFECTO, **json.load(f)}
+            prefs = {**_PREFS_DEFECTO, **json.load(f)}
     except (OSError, ValueError):
-        return dict(_PREFS_DEFECTO)
+        prefs = dict(_PREFS_DEFECTO)
+    aplicar_audio(prefs)
+    return prefs
 
 
 def guardar_prefs(prefs):
@@ -109,15 +124,117 @@ def ruta_tono(nombre):
     return ruta
 
 
+# --------------------------------------------------- dispositivos de audio
+_AUDIO = {"entrada": "", "salida": ""}      # nombres elegidos ("" = predeterminado)
+_NO_LISTAR = ("asignador de sonido", "sound mapper", "controlador primario")
+
+
+def aplicar_audio(prefs):
+    """Toma de las preferencias el micrófono y los altavoces elegidos."""
+    _AUDIO["entrada"] = prefs.get("audio_entrada") or ""
+    _AUDIO["salida"] = prefs.get("audio_salida") or ""
+
+
+def recargar_audio():
+    """Vuelve a intentar cargar sounddevice (p. ej. justo después de instalarlo)."""
+    global sd, HAY_SELECCION_AUDIO, ERROR_AUDIO
+    import importlib
+    try:
+        importlib.invalidate_caches()
+        sd = importlib.import_module("sounddevice")
+        HAY_SELECCION_AUDIO, ERROR_AUDIO = True, ""
+    except Exception as exc:
+        HAY_SELECCION_AUDIO = False
+        ERROR_AUDIO = f"{type(exc).__name__}: {exc}"
+    return HAY_SELECCION_AUDIO
+
+
+def dispositivos(tipo):
+    """Lista de nombres de dispositivos. tipo: 'entrada' (micrófonos) o 'salida' (altavoces)."""
+    if not HAY_SELECCION_AUDIO:
+        return []
+    campo = "max_input_channels" if tipo == "entrada" else "max_output_channels"
+
+    def recoger(solo_api):
+        nombres = []
+        for d in sd.query_devices():
+            nombre = d["name"].strip()
+            if ((solo_api is None or d["hostapi"] == solo_api) and d[campo] > 0
+                    and nombre not in nombres and not nombre.lower().startswith(_NO_LISTAR)):
+                nombres.append(nombre)
+        return nombres
+    try:
+        # primero solo la API principal (así no salen repetidos); si no hay nada, todas
+        return recoger(sd.default.hostapi) or recoger(None)
+    except Exception:
+        return []
+
+
+def _indice(tipo):
+    """Índice del dispositivo elegido, o None para usar el predeterminado."""
+    nombre = _AUDIO[tipo]
+    if not nombre or not HAY_SELECCION_AUDIO:
+        return None
+    campo = "max_input_channels" if tipo == "entrada" else "max_output_channels"
+    try:
+        api = sd.default.hostapi
+        for i, d in enumerate(sd.query_devices()):
+            if d["hostapi"] == api and d[campo] > 0 and d["name"].strip() == nombre:
+                return i
+    except Exception:
+        pass
+    return None      # ya no está conectado: se usa el predeterminado
+
+
 # ------------------------------------------------------------ reproducción
+_parar_actual = threading.Event()
+_DTYPE = {1: "uint8", 2: "int16", 3: "int24", 4: "int32"}
+
+
+def _reproducir_elegido(ruta, indice):
+    """Reproduce el .wav en el dispositivo elegido (en un hilo). False si no se puede."""
+    global _parar_actual
+    try:
+        with wave.open(ruta) as w:
+            canales, ancho, tasa = w.getnchannels(), w.getsampwidth(), w.getframerate()
+            datos = w.readframes(w.getnframes())
+        dtype = _DTYPE[ancho]
+    except (wave.Error, EOFError, OSError, KeyError):
+        return False
+    _parar_actual.set()                   # corta lo que estuviera sonando
+    parar = _parar_actual = threading.Event()
+
+    def tarea():
+        try:
+            with sd.RawOutputStream(samplerate=tasa, channels=canales, dtype=dtype,
+                                    device=indice) as flujo:
+                trozo = max(1, tasa // 10) * canales * ancho
+                for i in range(0, len(datos), trozo):
+                    if parar.is_set():
+                        return
+                    flujo.write(datos[i:i + trozo])
+        except Exception:
+            if ES_WINDOWS and not parar.is_set():      # el dispositivo falló: se usa el normal
+                winsound.PlaySound(ruta, winsound.SND_FILENAME | winsound.SND_ASYNC
+                                   | winsound.SND_NODEFAULT)
+    threading.Thread(target=tarea, daemon=True).start()
+    return True
+
+
 def reproducir(ruta):
-    """Reproduce un .wav sin bloquear la interfaz."""
-    if ES_WINDOWS and ruta and os.path.isfile(ruta):
+    """Reproduce un .wav sin bloquear la interfaz (en los altavoces elegidos)."""
+    if not (ruta and os.path.isfile(ruta)):
+        return
+    indice = _indice("salida")
+    if indice is not None and _reproducir_elegido(ruta, indice):
+        return
+    if ES_WINDOWS:
         winsound.PlaySound(ruta, winsound.SND_FILENAME | winsound.SND_ASYNC
                            | winsound.SND_NODEFAULT)
 
 
 def detener():
+    _parar_actual.set()
     if ES_WINDOWS:
         winsound.PlaySound(None, 0)
 
@@ -160,9 +277,16 @@ def duracion(ruta):
 
 # ----------------------------------------------------------- mensajes de voz
 class Grabadora:
-    """Graba el micrófono a un .wav con la API MCI de Windows (sin instalar nada)."""
+    """Graba el micrófono a un .wav. Con un micrófono elegido usa sounddevice; si no,
+    la API MCI de Windows (sin instalar nada) con el micrófono predeterminado."""
 
     ALIAS = "socialuna_voz"
+    TASA = 16000
+
+    def __init__(self):
+        self._flujo = None
+        self._trozos = []
+        self._tasa = self.TASA
 
     @staticmethod
     def _mci(orden):
@@ -178,6 +302,10 @@ class Grabadora:
 
     def iniciar(self):
         self.cancelar()
+        indice = _indice("entrada")
+        if indice is not None:
+            self._iniciar_elegido(indice)
+            return
         self._mci(f"open new type waveaudio alias {self.ALIAS}")
         try:
             self._mci(f"set {self.ALIAS} bitspersample 16 samplespersec 16000 channels 1")
@@ -185,16 +313,67 @@ class Grabadora:
             pass   # algunos micrófonos no aceptan el formato: se usa el de fábrica
         self._mci(f"record {self.ALIAS}")
 
+    def _iniciar_elegido(self, indice):
+        self._trozos = []
+        ultimo_error = None
+        tasas = [self.TASA]
+        try:
+            tasas.append(int(sd.query_devices(indice)["default_samplerate"]))
+        except Exception:
+            pass
+        for tasa in tasas:        # 16 kHz si el micrófono lo acepta; si no, su tasa propia
+            try:
+                flujo = sd.RawInputStream(
+                    samplerate=tasa, channels=1, dtype="int16", device=indice,
+                    callback=lambda datos, _n, _t, _s: self._trozos.append(bytes(datos)))
+                flujo.start()
+            except Exception as exc:
+                ultimo_error = exc
+                continue
+            self._flujo, self._tasa = flujo, tasa
+            return
+        raise OSError(f"no se pudo abrir el micrófono elegido ({ultimo_error})")
+
     def detener(self, ruta):
-        self._mci(f"stop {self.ALIAS}")
-        self._mci(f'save {self.ALIAS} "{ruta}"')
-        self._mci(f"close {self.ALIAS}")
+        if self._flujo is None:
+            self._mci(f"stop {self.ALIAS}")
+            self._mci(f'save {self.ALIAS} "{ruta}"')
+            self._mci(f"close {self.ALIAS}")
+            return
+        self._cerrar_flujo()
+        datos = b"".join(self._trozos)
+        if self._tasa != self.TASA:
+            datos = _a_16k(datos, self._tasa)
+        with wave.open(ruta, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(self.TASA)
+            w.writeframes(datos)
+
+    def _cerrar_flujo(self):
+        flujo, self._flujo = self._flujo, None
+        if flujo is not None:
+            try:
+                flujo.stop()
+                flujo.close()
+            except Exception:
+                pass
 
     def cancelar(self):
+        self._cerrar_flujo()
         try:
             self._mci(f"close {self.ALIAS}")
         except OSError:
             pass
+
+
+def _a_16k(datos, tasa):
+    """Baja un audio de 16 bits mono a 16 kHz (el tamaño se mantiene bajo el límite)."""
+    muestras = array("h")
+    muestras.frombytes(datos[:len(datos) // 2 * 2])
+    paso = tasa / Grabadora.TASA
+    n = int(len(muestras) / paso)
+    return array("h", (muestras[int(i * paso)] for i in range(n))).tobytes()
 
 
 if __name__ == "__main__":

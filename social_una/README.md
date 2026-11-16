@@ -20,6 +20,7 @@ es el único dueño de los datos (JSON en disco, estructuras en memoria). Los cl
 
 - Python 3.10+
 - Pillow (para manejo de imágenes)
+- sounddevice (opcional: elegir micrófono y altavoces en Personalizar)
 
 ## Instalación
 

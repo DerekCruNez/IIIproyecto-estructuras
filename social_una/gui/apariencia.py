@@ -6,8 +6,11 @@ así que te siguen si entras desde otra computadora.
 """
 import os
 import shutil
+import subprocess
+import sys
+import threading
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk
 
 from gui import estilo as E
 from gui import sonidos as S
@@ -128,6 +131,15 @@ class PestanaApariencia(tk.Frame):
         self._pintar_tonos()
         self._pintar_sonido()
 
+        fila = self._seccion("Dispositivos de audio",
+                             "Micrófono para grabar mensajes de voz y altavoces para "
+                             "escuchar tonos y audios.")
+        fila.columnconfigure(1, weight=1)
+        self._combo_audio(fila, 0, "Micrófono (entrada)", "entrada", "audio_entrada")
+        self._combo_audio(fila, 1, "Altavoces (salida)", "salida", "audio_salida")
+        if not S.HAY_SELECCION_AUDIO:
+            self._aviso_instalar(fila)
+
         fila = self._seccion("GIFs en línea",
                              "Para buscar GIFs en el chat pega tu clave gratuita de GIPHY "
                              "(developers.giphy.com). Se guarda solo en esta computadora.")
@@ -135,6 +147,81 @@ class PestanaApariencia(tk.Frame):
                                  placeholder="Clave de GIPHY", fondo=E.BLANCO)
         self.clave_giphy.pack(side="left", fill="x", expand=True, padx=(0, 10))
         Boton(fila, "Guardar clave", self._guardar_giphy, "primario", fondo=E.BLANCO).pack(side="left")
+
+    DEFECTO_AUDIO = "Predeterminado del sistema"
+
+    def _combo_audio(self, fila, n, titulo, tipo, clave):
+        """Lista desplegable con los dispositivos conectados (se actualiza al entrar a la pestaña)."""
+        tk.Label(fila, text=titulo, font=E.F_NEG, fg=E.TEXTO, bg=E.BLANCO, anchor="w",
+                 width=20).grid(row=n, column=0, sticky="w", pady=4)
+        nombres = S.dispositivos(tipo)
+        actual = self.app.prefs.get(clave) or ""
+        combo = ttk.Combobox(fila, state="readonly" if S.HAY_SELECCION_AUDIO else "disabled",
+                             font=E.F_NORMAL, values=[self.DEFECTO_AUDIO] + nombres)
+        combo.set(actual if actual in nombres else self.DEFECTO_AUDIO)
+        combo.grid(row=n, column=1, sticky="ew", pady=4)
+
+        def elegido(_e):
+            valor = combo.get()
+            self.app.prefs[clave] = "" if valor == self.DEFECTO_AUDIO else valor
+            S.guardar_prefs(self.app.prefs)
+            S.aplicar_audio(self.app.prefs)
+            combo.selection_clear()
+            self.winfo_toplevel().focus_set()
+            if tipo == "salida":
+                S.reproducir(S.ruta_tono(self.app.prefs.get("tono")
+                                         if self.app.prefs.get("tono") in S.TONOS else "Campanita"))
+        combo.bind("<<ComboboxSelected>>", elegido)
+
+    def _aviso_instalar(self, fila):
+        """Falta sounddevice en el Python que ejecuta la app: se puede instalar desde aquí."""
+        caja = tk.Frame(fila, bg=E.BLANCO)
+        caja.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        tk.Label(caja, text="Para elegir dispositivos falta la librería sounddevice en este "
+                            f"Python:\n{sys.executable}",
+                 font=E.F_PEQ, fg=E.SUAVE, bg=E.BLANCO, justify="left",
+                 wraplength=620).pack(anchor="w")
+        if S.ERROR_AUDIO and "ModuleNotFound" not in S.ERROR_AUDIO:
+            tk.Label(caja, text="Detalle: " + S.ERROR_AUDIO, font=E.F_PEQ, fg=E.ROJO,
+                     bg=E.BLANCO, justify="left", wraplength=620).pack(anchor="w", pady=(4, 0))
+        estado = tk.Label(caja, text="", font=E.F_PEQ, fg=E.SUAVE, bg=E.BLANCO)
+        boton = Boton(caja, "Instalar sounddevice", lambda: self._instalar_audio(boton, estado),
+                      "primario", padx=14, pady=6, fondo=E.BLANCO)
+        boton.pack(side="left", pady=(8, 0))
+        estado.pack(side="left", padx=10, pady=(8, 0))
+
+    def _instalar_audio(self, boton, estado):
+        estado.config(text="Instalando… (puede tardar un momento)", fg=E.SUAVE)
+        resultado = {}
+
+        def tarea():
+            try:
+                banderas = 0x08000000 if sys.platform == "win32" else 0   # sin ventana negra
+                r = subprocess.run([sys.executable, "-m", "pip", "install", "sounddevice"],
+                                   capture_output=True, text=True, timeout=240,
+                                   creationflags=banderas)
+                resultado["ok"] = r.returncode == 0
+                resultado["texto"] = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or [""]
+            except Exception as exc:
+                resultado["ok"], resultado["texto"] = False, [str(exc)]
+
+        threading.Thread(target=tarea, daemon=True).start()
+
+        def revisar():
+            if not self.winfo_exists():
+                return
+            if "ok" not in resultado:
+                self.after(400, revisar)
+                return
+            if resultado["ok"] and S.recargar_audio():
+                self.refrescar()          # ya salen los dispositivos
+                E.alerta_info("sounddevice instalado: ya puedes elegir los dispositivos")
+            elif resultado["ok"]:
+                estado.config(text="Se instaló, pero no cargó: reinicia la app. " + S.ERROR_AUDIO,
+                              fg=E.ROJO)
+            else:
+                estado.config(text="No se pudo instalar: " + resultado["texto"][0], fg=E.ROJO)
+        self.after(400, revisar)
 
     def _guardar_prefs_y_pintar(self):
         """Guarda y actualiza solo los tonos y el botón de sonido, sin reconstruir la

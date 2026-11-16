@@ -135,6 +135,14 @@ def aplicar_estilo(raiz):
     s.configure("Vertical.TScrollbar", troughcolor=FONDO, background=GRIS_CLARO, bordercolor=FONDO,
                 lightcolor=GRIS_CLARO, darkcolor=GRIS_CLARO, arrowcolor=GRIS_PH, gripcount=0, width=10)
     s.map("Vertical.TScrollbar", background=[("active", GRIS_PH)])
+    s.configure("TCombobox", fieldbackground=CAMPO, background=BOTON_SEC, foreground=TEXTO,
+                arrowcolor=TEXTO, bordercolor=BORDE, lightcolor=BORDE, darkcolor=BORDE, padding=6)
+    s.map("TCombobox", fieldbackground=[("readonly", CAMPO)], foreground=[("readonly", TEXTO)],
+          selectbackground=[("readonly", CAMPO)], selectforeground=[("readonly", TEXTO)])
+    raiz.option_add("*TCombobox*Listbox.background", CAMPO)
+    raiz.option_add("*TCombobox*Listbox.foreground", TEXTO)
+    raiz.option_add("*TCombobox*Listbox.selectBackground", ACENTO)
+    raiz.option_add("*TCombobox*Listbox.selectForeground", "white")
 
 
 def etiqueta(padre, texto="", fuente=F_NORMAL, color=None, fondo=None, **kw):
