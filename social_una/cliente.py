@@ -164,6 +164,8 @@ class Cliente:
             return {"tipo": "partida", "partida": datos}
         if tipo == "nueva_publicacion":
             return {"tipo": "publicacion", "autor": datos.get("autor", "")}
+        if tipo == "perfil_actualizado":
+            return {"tipo": "perfil_actualizado", "usuario": datos.get("usuario", "")}
         return None
 
     def _pedir(self, nombre_accion, **datos):

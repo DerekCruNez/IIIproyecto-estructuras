@@ -35,6 +35,7 @@ EXTENSIONES_BLOQUEADAS = (".exe", ".bat", ".cmd", ".com", ".msi", ".scr", ".ps1"
                           ".js", ".jse", ".wsf", ".lnk", ".reg", ".dll", ".hta", ".jar")
 TEMAS = ("claro", "oscuro")
 MAX_BIO = 190
+MAX_NOMBRE = 40
 # Firmas de los formatos de imagen aceptados -> extensión con la que se guardan.
 FIRMAS_IMAGEN = ((b"\x89PNG", ".png"), (b"\xff\xd8", ".jpg"), (b"GIF8", ".gif"))
 
@@ -333,6 +334,13 @@ class Servidor:
         for amigo in amigos if ok else []:
             self.enviar_a_usuario(amigo, mensaje)
 
+    def _avisar_a_todos(self, mensaje: dict) -> None:
+        """Evento para todos los usuarios conectados (p. ej. alguien cambió su perfil)."""
+        with self.lock_en_linea:
+            conectados = list(self.en_linea)
+        for u in conectados:
+            self.enviar_a_usuario(u, mensaje)
+
     def _avisar_presencia(self, usuario: str, en_linea: bool) -> None:
         self._avisar_amigos(usuario, {"evento": "en_linea",
                                       "datos": {"usuario": usuario, "en_linea": en_linea}})
@@ -512,17 +520,47 @@ class Servidor:
         try:
             usuario = self._requiere_login(sesion)
             campos = {}
-            for campo in ("bio", "foto", "link", "banner", "color_perfil", "tema", "paleta"):
+            for campo in ("nombre", "bio", "foto", "link", "banner", "color_perfil", "tema", "paleta"):
                 if datos.get(campo) is not None:
                     campos[campo] = self._texto(datos, campo, requerido=False).strip()
             self._validar_perfil(campos)
         except (PermissionError, ValueError) as exc:
             return self._respuesta(False, error=str(exc))
+        _, antes = self._almacen("obtener_perfil", usuario)
+        foto_vieja = antes.get("foto", "") if isinstance(antes, dict) else ""
         ok, resultado = self._almacen("editar_perfil", usuario, **campos)
+        # Si cambió o quitó su foto, la anterior se borra del servidor (si nadie más la usa).
+        if ok and "foto" in campos and foto_vieja and foto_vieja != campos["foto"]:
+            self._borrar_imagen_si_libre(foto_vieja)
+        if ok and any(c in campos for c in ("nombre", "foto", "banner", "bio", "link",
+                                            "color_perfil")):
+            self._avisar_a_todos({"evento": "perfil_actualizado", "datos": {"usuario": usuario}})
         return self._respuesta(ok, {"mensaje": str(resultado)} if ok else {},
                                "" if ok else str(resultado))
 
+    def _imagen_en_uso(self, nombre: str) -> bool:
+        """True si algún perfil, publicación o mensaje todavía usa esa imagen."""
+        with self._lock_almacen:
+            almacen = self.almacen
+            if any(nombre in (u.foto, u.banner) for u in almacen.usuarios):
+                return True
+            if any(nombre in (p.imagen, p.archivo) for p in almacen.publicaciones):
+                return True
+            return any(m.adjunto == nombre
+                       for mensajes in almacen.chats.values() for m in mensajes)
+
+    def _borrar_imagen_si_libre(self, nombre: str) -> None:
+        ruta = self._ruta_imagen(nombre)     # rechaza rutas raras; None si no existe
+        if ruta is None or self._imagen_en_uso(nombre):
+            return
+        try:
+            ruta.unlink()
+        except OSError:
+            pass    # si no se pudo borrar ahora, no afecta al cambio de foto
+
     def _validar_perfil(self, campos: dict) -> None:
+        if "nombre" in campos and not 2 <= len(campos["nombre"]) <= MAX_NOMBRE:
+            raise ValueError(f"El nombre debe tener entre 2 y {MAX_NOMBRE} caracteres.")
         if len(campos.get("bio", "")) > MAX_BIO:
             raise ValueError(f"La bio admite como máximo {MAX_BIO} caracteres.")
         if len(campos.get("link", "")) > 200:

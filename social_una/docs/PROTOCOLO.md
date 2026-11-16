@@ -49,7 +49,7 @@ Si `ok` es falso, `datos` puede estar vacío y `error` contiene el motivo.
 | `logout` | usuario | ok | Cierre de sesión |
 | `buscar_usuarios` | texto | lista de usuarios | Buscar usuarios por nombre/usuario |
 | `ver_perfil` | usuario | perfil del usuario | Obtener datos de perfil |
-| `editar_perfil` | bio, foto, link | ok | Editar perfil propio |
+| `editar_perfil` | nombre, bio, foto, link | ok | Editar perfil propio |
 | `enviar_solicitud` | origen, destino | ok | Enviar solicitud de amistad |
 | `responder_solicitud` | destino, origen, aceptar | ok | Aceptar/rechazar solicitud |
 | `listar_solicitudes` | usuario | lista de solicitudes | Listar solicitudes pendientes |
@@ -83,7 +83,7 @@ Cambios (nov 2026):
 - `registrar` usa el `id` que envía el cliente (si viene vacío, genera uno). El ID y el usuario son únicos.
 - `listar_amigos` / `listar_solicitudes` devuelven `[{usuario, nombre, foto, en_linea}]`.
 - `buscar_usuarios`, con sesión iniciada, agrega `amigo` y `pendiente` a cada resultado.
-- `editar_perfil` solo cambia los campos que llegan: bio (≤ 190), foto, link, banner, color_perfil (#RRGGBB), tema (claro/oscuro), paleta.
+- `editar_perfil` solo cambia los campos que llegan: nombre (2 a 40; solo el nombre para mostrar, la cuenta sigue siendo la misma `usuario`), bio (≤ 190), foto, link, banner, color_perfil (#RRGGBB), tema (claro/oscuro), paleta.
 - `publicar`: el texto es opcional si hay imagen o link. Las publicaciones traen `reacciones` ({emoji: [usuarios]}).
 - `enviar_chat` / `obtener_chat` aceptan `"#general"` (sala general, para todos los conectados).
 - Si dos usuarios se envían solicitud mutuamente, quedan como amigos.
@@ -142,6 +142,7 @@ Cambios (nov 2026):
 
 - `en_linea`: `{"usuario", "en_linea": true/false}` — un amigo se conectó o desconectó.
 - `nueva_publicacion`: `{"autor"}` — un amigo publicó.
+- `perfil_actualizado`: `{"usuario"}` — alguien cambió su nombre, foto o perfil (llega a todos los conectados); la foto anterior se borra del servidor.
 
 ### Evento de nuevo mensaje de chat
 

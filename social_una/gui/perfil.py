@@ -12,6 +12,7 @@ from gui.muro import elegir_imagen
 from gui.widgets import AreaTexto, Boton, Campo, Tarjeta
 
 MAX_BIO = 190   # igual que el servidor
+MAX_NOMBRE = 40
 
 
 class CabeceraPerfil(tk.Canvas):
@@ -118,6 +119,13 @@ class PestanaPerfil(tk.Frame):
         self.lbl_usuario = tk.Label(cuerpo, font=(E.FAMILIA, 11), fg=E.SUAVE, bg=E.BLANCO)
         self.lbl_usuario.pack(anchor="w", pady=(0, 18))
 
+        # ---- nombre (solo el nombre para mostrar; tu @usuario y tus datos no cambian)
+        self.nombre = Campo(cuerpo, "Nombre", placeholder="Tu nombre", fondo=E.BLANCO)
+        self.nombre.pack(fill="x")
+        tk.Label(cuerpo, text="Tu @usuario no cambia: tus amigos, chats y publicaciones "
+                              "siguen en la misma cuenta.", font=E.F_PEQ, fg=E.SUAVE,
+                 bg=E.BLANCO).pack(anchor="w", pady=(4, 0))
+
         # ---- foto
         self._titulo(cuerpo, "Foto de perfil")
         fila = tk.Frame(cuerpo, bg=E.BLANCO)
@@ -182,6 +190,7 @@ class PestanaPerfil(tk.Frame):
         self._limpiar_cambios()
         self.lbl_nombre.config(text=p["nombre"])
         self.lbl_usuario.config(text="@" + p["usuario"])
+        self.nombre.set(p.get("nombre", ""))
         self.bio.set(p.get("bio", ""))
         self.link.set(p.get("link", ""))
         self.muestras.pintar(p.get("color_perfil") or None)
@@ -219,10 +228,15 @@ class PestanaPerfil(tk.Frame):
         if len(bio) > MAX_BIO:
             alerta_aviso(f"La bio puede tener como máximo {MAX_BIO} caracteres.")
             return
+        nombre = self.nombre.get().strip()
+        if not 2 <= len(nombre) <= MAX_NOMBRE:
+            alerta_aviso(f"El nombre debe tener entre 2 y {MAX_NOMBRE} caracteres.")
+            return
         link = E.normalizar_link(self.link.get())
         resp = self.app.cliente.editar_perfil(bio, self.ruta_foto_nueva, link,
                                               ruta_banner=self.ruta_banner_nueva,
-                                              color_perfil=self.color_nuevo)
+                                              color_perfil=self.color_nuevo,
+                                              nombre=nombre)
         if respuesta_ok(resp, "No se pudo guardar el perfil."):
             alerta_info("Perfil actualizado.")
             self.app.perfiles.pop(self.app.perfil["usuario"], None)

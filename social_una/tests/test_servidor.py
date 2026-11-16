@@ -16,10 +16,10 @@ from protocolo import enviar_mensaje, recibir_mensaje as _recibir_mensaje
 
 def recibir_mensaje(sock):
     """Como protocolo.recibir_mensaje, pero salta los avisos informativos
-    (amigo en línea, nueva publicación) que no son parte de estas pruebas."""
+    (amigo en línea, nueva publicación, perfil actualizado) que no son parte de estas pruebas."""
     while True:
         mensaje = _recibir_mensaje(sock)
-        if not (mensaje and mensaje.get("evento") in ("en_linea", "nueva_publicacion")):
+        if not (mensaje and mensaje.get("evento") in ("en_linea", "nueva_publicacion", "perfil_actualizado")):
             return mensaje
 from servidor import Servidor
 
@@ -169,6 +169,63 @@ class PruebasServidor(unittest.TestCase):
         })["ok"])
         self.assertEqual(self.pedir(ana, "sugerencias")["datos"]["sugerencias"][0]["usuario"], "cami")
         self.assertTrue(self.pedir(ana, "eliminar_amigo", {"amigo": "bob"})["ok"])
+
+    def test_foto_de_perfil_se_comparte_y_la_anterior_se_borra_del_servidor(self):
+        import base64
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 32).decode("ascii")
+        ana, bob = self.conectar(), self.conectar()
+        self.registrar_e_iniciar(ana, "ana")
+        self.registrar_e_iniciar(bob, "bob")
+        carpeta = Path(self.directorio.name) / "datos" / "imagenes"
+
+        def subir_foto():
+            nombre = self.pedir(ana, "subir_imagen", {"imagen": png})["datos"]["nombre"]
+            self.assertTrue(self.pedir(ana, "editar_perfil", {"foto": nombre})["ok"])
+            return nombre
+
+        primera = subir_foto()
+        # otra persona ve la foto y puede descargarla del servidor
+        perfil = self.pedir(bob, "ver_perfil", {"usuario": "ana"})["datos"]["perfil"]
+        self.assertEqual(perfil["foto"], primera)
+        self.assertTrue(self.pedir(bob, "obtener_imagen", {"nombre": primera})["ok"])
+        self.assertTrue((carpeta / primera).is_file())
+
+        # al cambiarla, la anterior se borra y queda solo la nueva
+        segunda = subir_foto()
+        self.assertNotEqual(primera, segunda)
+        self.assertFalse((carpeta / primera).exists())
+        self.assertTrue((carpeta / segunda).is_file())
+        self.assertEqual(self.pedir(bob, "ver_perfil", {"usuario": "ana"})["datos"]["perfil"]["foto"],
+                         segunda)
+
+        # al quitar la foto, también se borra del servidor
+        self.assertTrue(self.pedir(ana, "editar_perfil", {"foto": ""})["ok"])
+        self.assertFalse((carpeta / segunda).exists())
+
+    def test_cambiar_el_nombre_mantiene_la_misma_cuenta_y_sus_datos(self):
+        ana, bob = self.conectar(), self.conectar()
+        self.registrar_e_iniciar(ana, "ana")
+        self.registrar_e_iniciar(bob, "bob")
+        self.assertTrue(self.pedir(ana, "enviar_solicitud", {"destino": "bob"})["ok"])
+        self.assertEqual(recibir_mensaje(bob)["datos"]["origen"], "ana")
+        self.assertTrue(self.pedir(bob, "responder_solicitud", {"origen": "ana", "aceptar": True})["ok"])
+        self.assertTrue(self.pedir(ana, "publicar", {"texto": "hola"})["ok"])
+        antes = self.pedir(bob, "ver_perfil", {"usuario": "ana"})["datos"]["perfil"]
+
+        self.assertTrue(self.pedir(ana, "editar_perfil", {"nombre": "Ana María Pérez"})["ok"])
+
+        despues = self.pedir(bob, "ver_perfil", {"usuario": "ana"})["datos"]["perfil"]
+        self.assertEqual(despues["nombre"], "Ana María Pérez")
+        self.assertEqual((despues["id"], despues["usuario"]), (antes["id"], antes["usuario"]))
+        # amistad y publicaciones siguen en la misma cuenta
+        self.assertEqual([u["usuario"] for u in self.pedir(bob, "listar_amigos")["datos"]["amigos"]], ["ana"])
+        self.assertEqual([u["nombre"] for u in self.pedir(bob, "listar_amigos")["datos"]["amigos"]],
+                         ["Ana María Pérez"])
+        muro = self.pedir(ana, "obtener_muro")["datos"]["publicaciones"]
+        self.assertEqual([p["autor"] for p in muro], ["ana"])
+        # nombres inválidos
+        self.assertFalse(self.pedir(ana, "editar_perfil", {"nombre": "A"})["ok"])
+        self.assertFalse(self.pedir(ana, "editar_perfil", {"nombre": "x" * 41})["ok"])
 
     def test_clientes_independientes_desconexion_y_peticion_malformada(self):
         a, b, c = self.conectar(), self.conectar(), self.conectar()

@@ -180,6 +180,13 @@ class Principal(tk.Frame):
             self.pestanas["Juegos"].partida(ev)
         elif tipo == "mensaje_actualizado":
             self.pestanas["Chat"].actualizar(ev)
+        elif tipo == "perfil_actualizado":
+            # alguien cambió su nombre o foto: se olvida lo guardado de esa persona y se
+            # repinta la pestaña actual para que se vea el cambio sin reiniciar
+            self.app.perfiles.pop(ev.get("usuario"), None)
+            if self.actual in ("Muro", "Amigos", "Buscar", "Chat") and \
+                    ev.get("usuario") != self.app.perfil["usuario"]:
+                self.pestanas[self.actual].refrescar()
         elif tipo == "en_linea":
             if ev.get("en_linea"):
                 toast(self.app, f"@{ev.get('usuario')} se conectó", icono="●")

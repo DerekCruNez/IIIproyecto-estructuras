@@ -255,14 +255,17 @@ class Almacen:
             return False, "Usuario no encontrado."
         return True, u.perfil_publico()
 
-    CAMPOS_PERFIL = ("bio", "foto", "link", "banner", "color_perfil", "tema", "paleta")
+    CAMPOS_PERFIL = ("nombre", "bio", "foto", "link", "banner", "color_perfil", "tema", "paleta")
 
     def editar_perfil(self, usuario: str, bio: str | None = None,
                       foto: str | None = None, link: str | None = None,
                       **extras: str | None) -> tuple[bool, Any]:
         """Edita los campos del perfil. Un campo en None se deja como está.
 
-        extras acepta banner, color_perfil, tema y paleta.
+        extras acepta nombre, banner, color_perfil, tema y paleta.
+
+        El nombre es solo el nombre para mostrar: la cuenta se identifica por `usuario`
+        (y su id), que no cambian, así que amigos, chats y publicaciones siguen igual.
         """
         u = self._buscar_usuario_por_nombre(usuario)
         if u is None:

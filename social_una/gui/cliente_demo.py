@@ -94,7 +94,7 @@ class ClienteDemo:
             u["foto"] = ruta_foto            # en la demo el "nombre" es la ruta completa
         if ruta_banner is not None:
             u["banner"] = ruta_banner
-        u.update({k: v for k, v in apariencia.items() if v is not None})
+        u.update({k: v for k, v in apariencia.items() if v is not None})   # incluye nombre
         return _ok(usuario=self._perfil(self.actual))
 
     def guardar_apariencia(self, tema, paleta):
