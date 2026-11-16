@@ -6,6 +6,7 @@ aparece al pasar el mouse sobre un mensaje).
 """
 import os
 import tempfile
+import time
 import tkinter as tk
 from datetime import datetime
 
@@ -14,7 +15,7 @@ from gui import estilo as E
 from gui.estilo import MarcoScroll, alerta_aviso, confirmar, respuesta_ok
 from gui.imagenes import cuadros_imagen, miniatura
 from gui.muro import abrir_archivo, elegir_archivo, elegir_imagen, tarjeta_archivo
-from gui.selectores import SelectorEmoji, SelectorGif, SelectorSticker
+from gui.selectores import Emergente, SelectorEmoji, SelectorGif, SelectorSticker
 from gui.sonidos import (MAX_SEGUNDOS_VOZ, Grabadora, duracion, guardar_prefs, reproducir,
                          detener as detener_sonido)
 from gui.widgets import Avatar, Boton, Campo, Tarjeta, animar, vacio
@@ -369,11 +370,13 @@ class PestanaChat(tk.Frame):
 
     # ------------------------------------------------------ emojis, GIF, sticker
     def _abrir_emojis(self):
-        SelectorEmoji(self.app, self.btn_emoji, self.campo.insertar)
+        Emergente.alternar(self.btn_emoji,
+                           lambda: SelectorEmoji(self.app, self.btn_emoji, self.campo.insertar))
 
     def _abrir_stickers(self):
         if not self._sin_conversacion():
-            SelectorSticker(self.app, self.btn_sticker, lambda r: self._enviar_tipo("sticker", "", r))
+            Emergente.alternar(self.btn_sticker, lambda: SelectorSticker(
+                self.app, self.btn_sticker, lambda r: self._enviar_tipo("sticker", "", r)))
 
     def _abrir_gifs(self):
         if self._sin_conversacion():
@@ -382,10 +385,14 @@ class PestanaChat(tk.Frame):
         def elegido(ruta):
             guardar_prefs(self.app.prefs)
             self._enviar_tipo("imagen", "", ruta)
-        SelectorGif(self.app, self.btn_gif, elegido, self.app.prefs)
+        Emergente.alternar(self.btn_gif, lambda: SelectorGif(
+            self.app, self.btn_gif, elegido, self.app.prefs))
 
     # ------------------------------------------------------------- menú "+"
     def _menu_mas(self):
+        # Segundo clic en "＋" con el menú abierto: solo lo cierra, no lo reabre.
+        if time.monotonic() - getattr(self, "_menu_mas_cierre", 0.0) < 0.35:
+            return
         menu = tk.Menu(self, tearoff=0, bg=E.BLANCO, fg=E.TEXTO, activebackground=E.CLARO,
                        activeforeground=E.TEXTO, font=E.F_NORMAL, bd=0)
         menu.add_command(label="  📎  Subir un archivo", command=self._subir_archivo)
@@ -395,7 +402,11 @@ class PestanaChat(tk.Frame):
         menu.add_command(label="  🎤  Grabar mensaje de voz", command=self._grabar)
         x = self.btn_mas.winfo_rootx()
         y = self.btn_mas.winfo_rooty() - 5 * 30
-        menu.tk_popup(x, y)
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+            self._menu_mas_cierre = time.monotonic()
 
     def _subir_archivo(self):
         if self._sin_conversacion():

@@ -4,6 +4,7 @@ import os
 import queue
 import tempfile
 import threading
+import time
 import tkinter as tk
 import urllib.parse
 import urllib.request
@@ -22,6 +23,22 @@ CARPETA_GIFS = os.path.join(tempfile.gettempdir(), "social_una_gifs")
 
 class Emergente(tk.Toplevel):
     """Ventana sin bordes que aparece sobre un botón y se cierra al hacer clic afuera."""
+    abierta = None      # selector visible en este momento
+    cierre = (None, 0.0)  # (botón, instante) del último cierre
+
+    @classmethod
+    def alternar(cls, ancla, crear):
+        """Si el selector de este botón está abierto lo cierra; si no, lo abre con crear()."""
+        actual = cls.abierta
+        if actual is not None and actual.winfo_exists():
+            mismo = actual.ancla is ancla
+            actual.destroy()
+            if mismo:
+                return
+        boton, t = cls.cierre
+        if boton is ancla and time.monotonic() - t < 0.35:
+            return      # el clic en el botón ya lo cerró (pérdida de foco)
+        cls.abierta = crear()
 
     def __init__(self, app, ancla, ancho, alto):
         super().__init__(app, bg=E.BORDE)
@@ -35,9 +52,15 @@ class Emergente(tk.Toplevel):
                 app.winfo_rootx() + app.winfo_width() - ancho - 10)
         y = ancla.winfo_rooty() - alto - 8
         self.geometry(f"{ancho}x{alto}+{max(0, x)}+{max(0, y)}")
+        self.ancla = ancla
         self.bind("<Escape>", lambda _e: self.destroy())
         self.bind("<FocusOut>", lambda _e: self.after(120, self._quizas_cerrar))
         self.focus_force()
+
+    def destroy(self):
+        # Se anota cuándo se cerró para que un clic en el mismo botón no lo reabra.
+        Emergente.cierre = (self.ancla, time.monotonic())
+        super().destroy()
 
     def _quizas_cerrar(self):
         if not self.winfo_exists():

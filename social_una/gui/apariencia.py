@@ -55,9 +55,9 @@ class PestanaApariencia(tk.Frame):
     def __init__(self, padre, app):
         super().__init__(padre, bg=E.FONDO)
         self.app = app
-        marco = MarcoScroll(self)
-        marco.pack(fill="both", expand=True)
-        self.interior = marco.interior
+        self.marco = MarcoScroll(self)
+        self.marco.pack(fill="both", expand=True)
+        self.interior = self.marco.interior
 
     def _seccion(self, titulo, descripcion):
         t = Tarjeta(self.interior)
@@ -70,6 +70,14 @@ class PestanaApariencia(tk.Frame):
         return fila
 
     def refrescar(self):
+        # Se recuerda el scroll para que al repintar no salte hasta arriba.
+        posicion = self.marco.canvas.yview()[0]
+        self._repintar()
+        self.update_idletasks()
+        self.marco.canvas.configure(scrollregion=self.marco.canvas.bbox("all"))
+        self.marco.canvas.yview_moveto(posicion)
+
+    def _repintar(self):
         for w in self.interior.winfo_children():
             w.destroy()
 
