@@ -1,0 +1,28 @@
+[
+  {
+    "id": "200",
+    "nombre": "Derek Cruz",
+    "usuario": "DekCru",
+    "hash_password": "72ab994fa2eb426c051ef59cad617750bfe06d7cf6311285ff79c19c32afd236",
+    "bio": "",
+    "foto": "43e91540d715452fbf0bc536d61fe2de.jpg",
+    "link": "",
+    "banner": "25796aafc04b47f592a7abdec4a013ef.jpg",
+    "color_perfil": "#475569",
+    "tema": "oscuro",
+    "paleta": "oceano"
+  },
+  {
+    "id": "100",
+    "nombre": "Daniel",
+    "usuario": "Minos",
+    "hash_password": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "bio": "",
+    "foto": "",
+    "link": "",
+    "banner": "",
+    "color_perfil": "",
+    "tema": "claro",
+    "paleta": "bosque"
+  }
+]
