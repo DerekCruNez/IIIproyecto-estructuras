@@ -39,6 +39,28 @@ class Emergente(tk.Toplevel):
         if boton is ancla and time.monotonic() - t < 0.35:
             return      # el clic en el botón ya lo cerró (pérdida de foco)
         cls.abierta = crear()
+        cls._instalar_clic_fuera(cls.abierta.app)
+
+    _clic_instalado = False
+
+    @classmethod
+    def _instalar_clic_fuera(cls, app):
+        """Un clic en cualquier otra parte de la ventana cierra el selector abierto."""
+        if not Emergente._clic_instalado:
+            app.bind("<Button-1>", Emergente._clic_global, add="+")
+            Emergente._clic_instalado = True
+
+    @staticmethod
+    def _clic_global(e):
+        p = Emergente.abierta
+        try:
+            if (p is None or not p.winfo_exists() or e.widget is p.ancla
+                    or str(e.widget).startswith(str(p))
+                    or time.monotonic() - p._creado < 0.25):
+                return
+            p.destroy()
+        except tk.TclError:
+            pass
 
     def __init__(self, app, ancla, ancho, alto):
         super().__init__(app, bg=E.BORDE)
@@ -64,6 +86,7 @@ class Emergente(tk.Toplevel):
             y = sobre - alto - 8
         self.geometry(f"{ancho}x{alto}+{max(0, x)}+{max(0, y)}")
         self.ancla = ancla
+        self._creado = time.monotonic()
         self.bind("<Escape>", lambda _e: self.destroy())
         self.bind("<FocusOut>", lambda _e: self.after(120, self._quizas_cerrar))
         self.focus_force()
@@ -71,6 +94,8 @@ class Emergente(tk.Toplevel):
     def destroy(self):
         # Se anota cuándo se cerró para que un clic en el mismo botón no lo reabra.
         Emergente.cierre = (self.ancla, time.monotonic())
+        if Emergente.abierta is self:
+            Emergente.abierta = None
         super().destroy()
 
     def _quizas_cerrar(self):

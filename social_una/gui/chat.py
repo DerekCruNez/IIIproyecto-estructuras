@@ -762,8 +762,12 @@ class FilaMensaje(tk.Frame):
                   "Reaccionar")
         tk.Frame(barra, bg=E.BORDE, width=1).pack(side="left", fill="y", padx=2, pady=4)
         mas = boton(EM.foto_emoji("😀", 18), lambda: None, "Más reacciones")
-        mas.bind("<Button-1>", lambda _e: SelectorEmoji(
-            self.chat.app, mas, lambda e: self.chat.accion(m, "reaccionar", e)))
+        def reaccionar_y_cerrar(emoji):
+            if Emergente.abierta is not None:
+                Emergente.abierta.destroy()
+            self.chat.accion(m, "reaccionar", emoji)
+        mas.bind("<Button-1>", lambda _e: Emergente.alternar(
+            mas, lambda: SelectorEmoji(self.chat.app, mas, reaccionar_y_cerrar)))
         if self.yo and m.get("tipo", "texto") == "texto":
             boton("✏", lambda: self.chat.editar(m), "Editar")
         boton("↩", lambda: self.chat.responder(m), "Responder")

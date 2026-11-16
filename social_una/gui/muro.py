@@ -138,6 +138,22 @@ class MeGusta(tk.Frame):
             pulso(self.corazon, (17, 21, 18, 14))
 
 
+_selector = {"abierto": None, "root": None}   # la fila de reacciones con el selector visible
+
+
+def _clic_global(e):
+    """Un clic fuera del selector ☺+ lo cierra."""
+    r = _selector["abierto"]
+    if r is None or r.selector is None:
+        return
+    w = e.widget
+    while w is not None:
+        if w is r.selector or w is r.boton:
+            return
+        w = getattr(w, "master", None)
+    r._cerrar_selector()
+
+
 class Reacciones(tk.Frame):
     """Chips con las reacciones de la publicación y un selector de emojis."""
 
@@ -171,11 +187,30 @@ class Reacciones(tk.Frame):
         self.boton.bind("<Enter>", lambda _e: self.boton.config(fg=E.TEXTO))
         self.boton.bind("<Leave>", lambda _e: self.boton.config(fg=E.SUAVE))
 
+    def _cerrar_selector(self):
+        if self.selector is not None:
+            try:
+                self.selector.destroy()
+            except tk.TclError:
+                pass
+            self.selector = None
+        if _selector["abierto"] is self:
+            _selector["abierto"] = None
+
     def _alternar_selector(self):
         if self.selector is not None:
-            self.selector.destroy()
-            self.selector = None
+            self._cerrar_selector()
             return
+        anterior = _selector["abierto"]
+        if anterior is not None and anterior is not self:
+            try:
+                anterior._cerrar_selector()     # solo uno abierto a la vez
+            except tk.TclError:
+                pass
+        _selector["abierto"] = self
+        if _selector["root"] is None:
+            _selector["root"] = self.winfo_toplevel()
+            _selector["root"].bind("<Button-1>", _clic_global, add="+")
         self.selector = tk.Frame(self, bg=E.BOTON_SEC, padx=4, pady=2)
         self.selector.pack(side="left", padx=(4, 0))
         for emoji in REACCIONES:
