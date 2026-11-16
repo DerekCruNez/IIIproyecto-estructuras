@@ -59,7 +59,7 @@ Si `ok` es falso, `datos` puede estar vacío y `error` contiene el motivo.
 | `dar_like` | id_publicacion, usuario | ok | Like/unlike a publicación |
 | `enviar_chat` | emisor, receptor, texto | ok | Enviar mensaje de chat |
 | `obtener_chat` | a, b | lista de mensajes | Obtener conversación |
-| `sugerencias` | usuario | lista de usuarios sugeridos (con `en_comun`) | Sugerencias de amigos de amigos |
+| `sugerencias` | usuario | lista de usuarios sugeridos (con `en_comun`) | Sugerencias de amigos de amigos primero (más en común antes); si no hay, completa con otros usuarios que aún no son amigos (`en_comun` = 0) |
 | `eliminar_amigo` | amigo | ok | Elimina la amistad en ambos sentidos |
 | `reaccionar` | id_publicacion, emoji (😂 🔥 👏 😮 😢) | ok | Pone/quita una reacción rápida |
 | `subir_imagen` | imagen (base64, PNG/JPG/GIF, ≤ 2 MB) | nombre | Sube foto de perfil o banner |

@@ -659,4 +659,20 @@ class Almacen:
                 perfil["en_comun"] = sugerencias[nombre_usuario]
                 resultado.append(perfil)
 
+        # Si no hay amigos de amigos (p. ej. tener un solo amigo que no tiene a
+        # nadie más), se completa con el resto de usuarios que aún no son amigos.
+        ya_incluidos = set(sugerencias)
+        restantes = sorted(
+            (u for u in self.usuarios
+             if u.usuario != usuario
+             and u.usuario not in amigos_directos
+             and u.usuario not in ya_incluidos
+             and usuario not in self.solicitudes.get(u.usuario, [])),
+            key=lambda u: u.usuario.lower(),
+        )
+        for u in restantes:
+            perfil = u.perfil_publico()
+            perfil["en_comun"] = 0
+            resultado.append(perfil)
+
         return True, resultado

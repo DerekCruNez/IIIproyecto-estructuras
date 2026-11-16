@@ -71,7 +71,7 @@ class PestanaBuscar(tk.Frame):
         for s in self.sugerencias:
             n = s.get("en_comun", 0)
             FilaUsuario(t, s["usuario"], s["nombre"],
-                        f"{n} amigo{'s' if n != 1 else ''} en común",
+                        f"{n} amigo{'s' if n != 1 else ''} en común" if n else "Sugerido para ti",
                         ruta_foto=self.app.ruta_foto(s),
                         al_click=lambda x=s["usuario"]: self.app.ver_perfil(x),
                         acciones=[("Agregar amigo", lambda x=s["usuario"]: self._agregar(x),

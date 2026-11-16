@@ -14,7 +14,7 @@ es el único dueño de los datos (JSON en disco, estructuras en memoria). Los cl
   con texto/imagen/link
 - Likes en publicaciones
 - Chat en vivo
-- Sugerencias de amigos de amigos
+- Sugerencias de amigos de amigos; si no hay, otros usuarios que aún no son amigos
 
 ## Requisitos
 

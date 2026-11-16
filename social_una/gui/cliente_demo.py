@@ -152,6 +152,9 @@ class ClienteDemo:
             for otro in self.amigos[amigo]:
                 if otro != self.actual and otro not in mios:
                     cuenta[otro] = cuenta.get(otro, 0) + 1
+        for u in sorted(self.usuarios):
+            if u != self.actual and u not in mios:
+                cuenta.setdefault(u, 0)
         return _ok(sugerencias=[{"usuario": u, "nombre": self.usuarios[u]["nombre"], "en_comun": n}
                                 for u, n in sorted(cuenta.items(), key=lambda x: -x[1])])
 
