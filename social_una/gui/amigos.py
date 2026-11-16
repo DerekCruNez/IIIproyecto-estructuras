@@ -29,6 +29,10 @@ class PestanaAmigos(tk.Frame):
 
         t1, self.lbl_amigos, self.marco_amigos = _panel(self, "Mis amigos")
         t1.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        # Siempre visible (con 0, 1 o más amigos) para poder seguir agregando gente.
+        Boton(self.lbl_amigos.master, "Buscar personas",
+              lambda: self.app.vista.ir("Buscar"), "primario", padx=14, pady=5,
+              fondo=E.BLANCO).pack(side="right")
         t2, self.lbl_sol, self.marco_sol = _panel(self, "Solicitudes de amistad")
         t2.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
@@ -43,8 +47,6 @@ class PestanaAmigos(tk.Frame):
         if not amigos:
             vacio(self.marco_amigos.interior, "Aún no tienes amigos.\nBusca personas para empezar.",
                   E.BLANCO).pack(pady=(30, 12))
-            Boton(self.marco_amigos.interior, "Buscar personas",
-                  lambda: self.app.vista.ir("Buscar"), "primario", fondo=E.BLANCO).pack()
         for a in amigos:
             u = a["usuario"]
             estado = "En línea" if a.get("en_linea") else "Desconectado"
