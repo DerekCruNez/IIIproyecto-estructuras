@@ -50,7 +50,18 @@ class Emergente(tk.Toplevel):
         ancla.update_idletasks()
         x = min(ancla.winfo_rootx() + ancla.winfo_width() - ancho,
                 app.winfo_rootx() + app.winfo_width() - ancho - 10)
-        y = ancla.winfo_rooty() - alto - 8
+        # Arriba del botón si cabe; si no (p. ej. en el Muro, donde el botón está arriba),
+        # abajo. Nunca encima del botón: así se puede volver a tocar para cerrarlo.
+        sobre = ancla.winfo_rooty()
+        bajo = self.winfo_screenheight() - (sobre + ancla.winfo_height())
+        if sobre >= alto + 8:
+            y = sobre - alto - 8
+        elif bajo >= alto + 8 or bajo > sobre:
+            alto = min(alto, max(200, bajo - 16))
+            y = sobre + ancla.winfo_height() + 8
+        else:
+            alto = max(200, sobre - 16)
+            y = sobre - alto - 8
         self.geometry(f"{ancho}x{alto}+{max(0, x)}+{max(0, y)}")
         self.ancla = ancla
         self.bind("<Escape>", lambda _e: self.destroy())
