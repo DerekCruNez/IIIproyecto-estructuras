@@ -105,27 +105,27 @@ class PestanaApariencia(tk.Frame):
         tonos = tk.Frame(fila, bg=E.BLANCO)
         tonos.pack(side="left", padx=(18, 0))
         prefs = self.app.prefs
+        self._filas_tono = {}
         for nombre in S.TONOS:
-            activo = not prefs.get("tono_propio") and prefs.get("tono") == nombre
-            f = tk.Frame(tonos, bg=E.CLARO if activo else E.BLANCO, cursor="hand2")
+            f = tk.Frame(tonos, bg=E.BLANCO, cursor="hand2")
             f.pack(fill="x")
             play = tk.Label(f, text="▶", font=E.F_NEG, fg=E.ACENTO if E.TEMA == "claro"
                             else E.LATERAL_TEXTO, bg=f.cget("bg"), padx=8, cursor="hand2")
             play.pack(side="left")
             play.bind("<Button-1>", lambda _e, n=nombre: S.reproducir(S.ruta_tono(n)))
-            nom = tk.Label(f, text=nombre + ("   ✓" if activo else ""), font=E.F_NEG if activo
-                           else E.F_NORMAL, fg=E.TEXTO, bg=f.cget("bg"), padx=6, pady=4)
+            nom = tk.Label(f, text=nombre, font=E.F_NORMAL, fg=E.TEXTO, bg=f.cget("bg"),
+                           padx=6, pady=4)
             nom.pack(side="left")
             for w in (f, nom):
                 w.bind("<Button-1>", lambda _e, n=nombre: self._elegir_tono(n))
-        propio = prefs.get("tono_propio")
+            self._filas_tono[nombre] = (f, play, nom)
         fila_propio = tk.Frame(tonos, bg=E.BLANCO)
         fila_propio.pack(fill="x", pady=(8, 0))
         Boton(fila_propio, "Usar mi propio .wav", self._tono_propio, "secundario", padx=12,
               pady=5, fondo=E.BLANCO).pack(side="left")
-        if propio:
-            tk.Label(fila_propio, text="✓ " + os.path.basename(propio), font=E.F_PEQ_NEG,
-                     fg=E.TEXTO, bg=E.BLANCO).pack(side="left", padx=8)
+        self.lbl_propio = tk.Label(fila_propio, text="", font=E.F_PEQ_NEG, fg=E.TEXTO, bg=E.BLANCO)
+        self.lbl_propio.pack(side="left", padx=8)
+        self._pintar_tonos()
         self._pintar_sonido()
 
         fila = self._seccion("GIFs en línea",
@@ -137,8 +137,23 @@ class PestanaApariencia(tk.Frame):
         Boton(fila, "Guardar clave", self._guardar_giphy, "primario", fondo=E.BLANCO).pack(side="left")
 
     def _guardar_prefs_y_pintar(self):
+        """Guarda y actualiza solo los tonos y el botón de sonido, sin reconstruir la
+        pestaña (reconstruirla hacía parpadear y saltar la pantalla)."""
         S.guardar_prefs(self.app.prefs)
-        self.refrescar()
+        self._pintar_tonos()
+        self._pintar_sonido()
+
+    def _pintar_tonos(self):
+        prefs = self.app.prefs
+        for nombre, (f, play, nom) in self._filas_tono.items():
+            activo = not prefs.get("tono_propio") and prefs.get("tono") == nombre
+            fondo = E.CLARO if activo else E.BLANCO
+            for w in (f, play, nom):
+                w.config(bg=fondo)
+            nom.config(text=nombre + ("   ✓" if activo else ""),
+                       font=E.F_NEG if activo else E.F_NORMAL)
+        propio = prefs.get("tono_propio")
+        self.lbl_propio.config(text=("✓ " + os.path.basename(propio)) if propio else "")
 
     def _pintar_sonido(self):
         activo = self.app.prefs.get("sonido")

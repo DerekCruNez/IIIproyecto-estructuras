@@ -196,8 +196,12 @@ class PestanaChat(tk.Frame):
         if self.actual is None:
             self._abrir_clave(SALA)
 
+    def al_mostrar(self):
+        if self.actual is not None:
+            self._bajar()
+
     def _pintar_lista(self):
-        self.lista.limpiar()
+        self.lista.limpiar(conservar=True)
         for clave, nombre, estado, en_linea in self.datos:
             FilaConversacion(self.lista.interior, clave, nombre, estado, en_linea,
                              self.no_leidos.get(clave, 0), clave == self.actual,

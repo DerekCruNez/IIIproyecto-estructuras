@@ -13,7 +13,7 @@ from gui import estilo as E
 from gui import textos as T
 from gui.estilo import MarcoScroll, alerta_aviso, confirmar, respuesta_ok
 from gui.imagenes import cuadros_imagen, miniatura
-from gui.widgets import Boton, Campo, AreaTexto, Tarjeta, Avatar, vacio, pulso, animar
+from gui.widgets import Boton, Campo, AreaTexto, Tarjeta, Avatar, vacio, pulso, animar, marcar_foco_programado
 from gui.emojis import burbuja, foto_emoji, latido, separar
 from gui.selectores import SelectorEmoji
 
@@ -318,7 +318,7 @@ class PestanaMuro(tk.Frame):
         resp = self.app.cliente.obtener_muro()
         if not respuesta_ok(resp, "No se pudo cargar el muro."):
             return
-        self.marco.limpiar()
+        self.marco.limpiar(conservar=True)
         pubs = resp.get("publicaciones", [])
         if not pubs:
             vacio(self.marco.interior, "Todavía no hay publicaciones.\n"
@@ -418,6 +418,7 @@ class PestanaMuro(tk.Frame):
         area = AreaTexto(zona, alto=3)
         area.pack(fill="x", pady=(12, 0))
         area.set(p["texto"])
+        marcar_foco_programado()
         area.texto.focus_set()
         botones = tk.Frame(zona, bg=E.BLANCO)
         botones.pack(anchor="e", pady=(8, 0))

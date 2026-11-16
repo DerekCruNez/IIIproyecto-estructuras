@@ -1,9 +1,11 @@
 """Ventana raíz: maneja la navegación entre pantallas, el tema y los eventos del servidor."""
 import queue
+import time
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 from gui import estilo as E
+from gui import widgets as W
 from gui.estilo import aplicar_estilo
 from gui.imagenes import logo
 from gui.vistas_acceso import VistaConexion, VistaLogin, VistaRegistro
@@ -33,8 +35,27 @@ class App(tk.Tk):
         self.contenedor.pack(fill="both", expand=True)
         self.protocol("WM_DELETE_WINDOW", self.cerrar)
 
+        # Un clic fuera de un campo de texto le quita el foco (si no, el cursor
+        # y la selección se quedaban "pegados" al hacer clic en otra parte).
+        self.bind_all("<Button-1>", self._soltar_foco, add="+")
+
         self.mostrar_conexion()
         self.after(200, self._revisar_cola)
+
+    _CAMPOS = (tk.Entry, tk.Text, tk.Spinbox, ttk.Entry, ttk.Combobox)
+
+    def _soltar_foco(self, e):
+        w = e.widget
+        if not isinstance(w, tk.Misc) or isinstance(w, self._CAMPOS):
+            return
+        if time.monotonic() - W.foco_programado < 0.4:
+            return      # el código acaba de enfocar un campo a propósito (p. ej. al responder)
+        try:
+            foco = self.focus_get()
+            if isinstance(foco, self._CAMPOS):
+                w.winfo_toplevel().focus_set()
+        except (KeyError, tk.TclError):
+            pass
 
     # ---------------------------------------------------------- navegación
     def _mostrar(self, clase):
@@ -81,9 +102,28 @@ class App(tk.Tk):
         self._icono = logo(64)
         self.iconphoto(True, self._icono)
         if reconstruir and isinstance(self.vista, Principal):
-            seccion = self.vista.actual
-            self.mostrar_principal()
-            self.vista.ir(seccion)
+            self._reconstruir_principal()
+
+    def _reconstruir_principal(self):
+        """Rehace la ventana con los colores nuevos sin que se vea el proceso: la nueva
+        se arma encima de la vieja y recién cuando está lista se quita la vieja."""
+        vieja = self.vista
+        seccion = vieja.actual
+        scroll = None
+        marco = getattr(vieja.pestanas.get(seccion), "marco", None)
+        if marco is not None and seccion != "Chat":
+            scroll = marco.canvas.yview()[0]
+        nueva = Principal(self.contenedor, self, inicial=seccion)
+        nueva.place(x=0, y=0, relwidth=1, relheight=1)
+        nueva.update_idletasks()
+        marco = getattr(nueva.pestanas.get(seccion), "marco", None)
+        if marco is not None and scroll:
+            marco.canvas.configure(scrollregion=marco.canvas.bbox("all"))
+            marco.canvas.yview_moveto(scroll)
+        self.vista = nueva
+        vieja.destroy()
+        nueva.place_forget()
+        nueva.pack(fill="both", expand=True)
 
     # ----------------------------------------------------------- perfiles
     def perfil_de(self, usuario, recargar=False):

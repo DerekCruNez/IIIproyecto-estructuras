@@ -303,10 +303,23 @@ class MarcoScroll(tk.Frame):
             paso = -1 if e.delta > 0 else 1
         self.canvas.yview_scroll(paso, "units")
 
-    def limpiar(self):
+    def limpiar(self, conservar=False):
+        """Borra el contenido. Con conservar=True mantiene la posición del scroll
+        al volver a pintar (si no, vuelve arriba)."""
+        pos = self.canvas.yview()[0]
         for hijo in self.interior.winfo_children():
             hijo.destroy()
         self.canvas.yview_moveto(0)
+        if conservar and pos > 0:
+            self.after_idle(self._restaurar, pos)
+
+    def _restaurar(self, pos):
+        try:
+            self.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            self.canvas.yview_moveto(pos)
+        except tk.TclError:
+            pass
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ class PestanaBuscar(tk.Frame):
     def refrescar(self):
         resp = self.app.cliente.sugerencias()
         self.sugerencias = resp.get("sugerencias", []) if resp and resp.get("ok") else []
-        self._pintar()
+        self._pintar(conservar=True)
 
     def _buscar(self):
         texto = self.campo.get().strip()
@@ -49,8 +49,8 @@ class PestanaBuscar(tk.Frame):
         tk.Frame(t, bg=E.BORDE, height=1).pack(fill="x")
         return t
 
-    def _pintar(self):
-        self.marco.limpiar()
+    def _pintar(self, conservar=False):
+        self.marco.limpiar(conservar=conservar)
         if self.resultados is not None:
             t = self._seccion(f"Resultados  ·  {len(self.resultados)}")
             if not self.resultados:

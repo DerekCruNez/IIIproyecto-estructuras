@@ -60,7 +60,7 @@ class Principal(tk.Frame):
     NAV = ("Muro", "Amigos", "Buscar", "Chat", "Juegos", "Perfil", "Personalizar")
     TITULOS = T.TITULOS_SECCION
 
-    def __init__(self, padre, app):
+    def __init__(self, padre, app, inicial="Muro"):
         super().__init__(padre, bg=E.FONDO)
         self.app = app
         self.actual = None
@@ -123,7 +123,7 @@ class Principal(tk.Frame):
             "Juegos": PestanaJuegos(zona, app),
         }
         self.actualizar_usuario()
-        self.ir("Muro")
+        self.ir(inicial)
 
     # ------------------------------------------------------------ usuario
     def actualizar_usuario(self):
@@ -138,15 +138,22 @@ class Principal(tk.Frame):
         if nombre == self.actual:
             self.pestanas[nombre].refrescar()
             return
+        self.winfo_toplevel().focus_set()   # el cursor no se queda en el campo de otra pestaña
+        nueva = self.pestanas[nombre]
+        # Se prepara la pestaña oculta y luego se cambia de golpe: así no se ve
+        # el contenido viejo ni la pestaña a medio pintar (parpadeo).
+        nueva.refrescar()
         if self.actual:
             self.pestanas[self.actual].pack_forget()
             self.nav[self.actual].activar(False)
         self.actual = nombre
-        self.pestanas[nombre].pack(fill="both", expand=True)
+        nueva.pack(fill="both", expand=True)
         self.nav[nombre].activar(True)
         self.nav[nombre].avisar(False)
         self.lbl_titulo.config(text=self.TITULOS[nombre])
-        self.pestanas[nombre].refrescar()
+        self.update_idletasks()
+        if hasattr(nueva, "al_mostrar"):
+            nueva.al_mostrar()
 
     def abrir_chat(self, usuario):
         self.ir("Chat")

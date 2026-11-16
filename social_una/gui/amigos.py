@@ -43,7 +43,7 @@ class PestanaAmigos(tk.Frame):
         amigos, solicitudes = resp.get("amigos", []), resp.get("solicitudes", [])
 
         self.lbl_amigos.config(text=f"Mis amigos  ·  {len(amigos)}")
-        self.marco_amigos.limpiar()
+        self.marco_amigos.limpiar(conservar=True)
         if not amigos:
             vacio(self.marco_amigos.interior, "Aún no tienes amigos.\nBusca personas para empezar.",
                   E.BLANCO).pack(pady=(30, 12))
@@ -61,7 +61,7 @@ class PestanaAmigos(tk.Frame):
                         ).pack(fill="x")
 
         self.lbl_sol.config(text=f"Solicitudes de amistad  ·  {len(solicitudes)}")
-        self.marco_sol.limpiar()
+        self.marco_sol.limpiar(conservar=True)
         if not solicitudes:
             vacio(self.marco_sol.interior, "No tienes solicitudes pendientes.", E.BLANCO).pack(pady=30)
         for s in solicitudes:

@@ -1,4 +1,5 @@
 """Componentes propios reutilizables: botón, campo de texto, tarjeta, avatar y fila de usuario."""
+import time
 import tkinter as tk
 from tkinter import font as tkfont
 
@@ -87,6 +88,15 @@ class Boton(tk.Canvas):
         self._pintar()
 
 
+# Instante del último foco dado a un campo por código (no por clic del usuario).
+foco_programado = 0.0
+
+
+def marcar_foco_programado():
+    global foco_programado
+    foco_programado = time.monotonic()
+
+
 class Campo(tk.Frame):
     """Campo de una línea con etiqueta opcional, borde que cambia al enfocar y placeholder."""
 
@@ -127,6 +137,7 @@ class Campo(tk.Frame):
 
     def _al_desenfocar(self, _e):
         self.borde.config(bg=E.BORDE)
+        self.entrada.selection_clear()
         if not self.var.get() and self._placeholder:
             self._poner_ph()
 
@@ -141,6 +152,7 @@ class Campo(tk.Frame):
             self._poner_ph()
 
     def focus(self):
+        marcar_foco_programado()
         self.entrada.focus_set()
 
     def insertar(self, texto):
@@ -151,6 +163,7 @@ class Campo(tk.Frame):
             self.entrada.config(fg=E.TEXTO, show=self._oculto)
             self.var.set("")
         self.entrada.insert("insert", texto)
+        marcar_foco_programado()
         self.entrada.focus_set()
 
     def al_presionar_enter(self, funcion):
@@ -169,7 +182,11 @@ class AreaTexto(tk.Frame):
                              highlightthickness=0, padx=10, pady=8, undo=True)
         self.texto.pack(fill="both", expand=True)
         self.texto.bind("<FocusIn>", lambda _e: self.borde.config(bg=E.ACENTO))
-        self.texto.bind("<FocusOut>", lambda _e: self.borde.config(bg=E.BORDE))
+        self.texto.bind("<FocusOut>", self._al_desenfocar)
+
+    def _al_desenfocar(self, _e):
+        self.borde.config(bg=E.BORDE)
+        self.texto.tag_remove("sel", "1.0", "end")
 
     def get(self):
         return self.texto.get("1.0", "end").strip()
@@ -183,6 +200,7 @@ class AreaTexto(tk.Frame):
 
     def insertar(self, texto):
         self.texto.insert("insert", texto)
+        marcar_foco_programado()
         self.texto.focus_set()
 
 
