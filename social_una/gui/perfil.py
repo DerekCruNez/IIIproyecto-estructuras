@@ -234,13 +234,22 @@ class PestanaPerfil(tk.Frame):
 # Ventanita de perfil de otra persona
 # ---------------------------------------------------------------------------
 def mostrar_perfil(app, usuario):
-    """Abre una tarjeta flotante con el perfil de `usuario`."""
+    """Abre una tarjeta flotante con el perfil de `usuario` (una sola a la vez)."""
+    previa = getattr(app, "_ventana_perfil", None)
+    if previa is not None and previa[1].winfo_exists():
+        if previa[0] == usuario:
+            previa[1].deiconify()
+            previa[1].lift()
+            previa[1].focus_force()
+            return      # ya está abierto: no se abre otra vez
+        previa[1].destroy()
     p = app.perfil_de(usuario, recargar=True)
     if p is None:
         alerta_aviso("No se pudo cargar ese perfil.")
         return
     ancho = 420
     ven = tk.Toplevel(app, bg=E.BLANCO)
+    app._ventana_perfil = (usuario, ven)
     ven.title(f"@{usuario}")
     ven.resizable(False, False)
     ven.transient(app)
