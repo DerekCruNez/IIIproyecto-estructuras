@@ -4,6 +4,7 @@ Cada publicación tiene "me gusta" con animación y reacciones rápidas. Los cam
 se pintan al momento en la tarjeta (sin recargar todo el muro).
 """
 import os
+import time
 import shutil
 import tkinter as tk
 import webbrowser
@@ -15,7 +16,7 @@ from gui.estilo import MarcoScroll, alerta_aviso, confirmar, respuesta_ok
 from gui.imagenes import cuadros_imagen, miniatura
 from gui.widgets import Boton, Campo, AreaTexto, Tarjeta, Avatar, vacio, pulso, animar, marcar_foco_programado
 from gui.emojis import burbuja, foto_emoji, latido, separar
-from gui.selectores import SelectorEmoji
+from gui.selectores import Emergente, SelectorEmoji
 
 LIMITE_IMAGEN = 2 * 1024 * 1024  # 2 MB
 FIRMAS = (b"\x89PNG", b"\xff\xd8", b"GIF8")
@@ -236,8 +237,8 @@ class PestanaMuro(tk.Frame):
         self.btn_emoji = tk.Label(opciones, image=foto_emoji("🙂", 22), bg=E.BLANCO,
                                   cursor="hand2", padx=6)
         self.btn_emoji.pack(side="left", padx=(6, 0))
-        self.btn_emoji.bind("<Button-1>", lambda _e: SelectorEmoji(
-            self.app, self.btn_emoji, self.texto.insertar))
+        self.btn_emoji.bind("<Button-1>", lambda _e: Emergente.alternar(
+            self.btn_emoji, lambda: SelectorEmoji(self.app, self.btn_emoji, self.texto.insertar)))
         Boton(opciones, "Publicar", self._publicar, "primario", padx=22, pady=7,
               fondo=E.BLANCO).pack(side="right")
         self.link = Campo(opciones, placeholder="Link (opcional)", fondo=E.BLANCO)
@@ -266,7 +267,8 @@ class PestanaMuro(tk.Frame):
             guardar_prefs(self.app.prefs)
             self.ruta_imagen = ruta
             self._pintar_adjuntos()
-        SelectorGif(self.app, self.btn_gif, elegido, self.app.prefs)
+        Emergente.alternar(self.btn_gif, lambda: SelectorGif(
+            self.app, self.btn_gif, elegido, self.app.prefs))
 
     def _adjuntar_archivo(self):
         ruta = elegir_archivo()
@@ -403,13 +405,19 @@ class PestanaMuro(tk.Frame):
                      wraplength=640, justify="left", anchor="w").pack(anchor="w", pady=(12, 0))
 
     def _menu_publicacion(self, e, p, tarjeta, zona_texto):
+        if time.monotonic() - getattr(self, "_menu_cierre", 0.0) < 0.35:
+            return      # el clic en ⋯ con el menú abierto solo lo cierra
         menu = tk.Menu(self, tearoff=0, bg=E.BLANCO, fg=E.TEXTO, activebackground=E.CLARO,
                        activeforeground=E.TEXTO, font=E.F_NORMAL)
         menu.add_command(label="Editar publicación", command=lambda: self._editar(p, zona_texto))
         menu.add_separator()
         menu.add_command(label="Eliminar publicación", foreground=E.ROJO,
                          command=lambda: self._eliminar(p, tarjeta))
-        menu.tk_popup(e.x_root, e.y_root)
+        try:
+            menu.tk_popup(e.x_root, e.y_root)
+        finally:
+            menu.grab_release()
+            self._menu_cierre = time.monotonic()
 
     def _editar(self, p, zona):
         """Cambia el texto por un cuadro editable con Guardar y Cancelar."""
@@ -424,7 +432,8 @@ class PestanaMuro(tk.Frame):
         botones.pack(anchor="e", pady=(8, 0))
         emoji = tk.Label(botones, image=foto_emoji("🙂", 20), bg=E.BLANCO, cursor="hand2", padx=6)
         emoji.pack(side="left")
-        emoji.bind("<Button-1>", lambda _e: SelectorEmoji(self.app, emoji, area.insertar))
+        emoji.bind("<Button-1>", lambda _e: Emergente.alternar(
+            emoji, lambda: SelectorEmoji(self.app, emoji, area.insertar)))
 
         def guardar():
             texto = area.get()
