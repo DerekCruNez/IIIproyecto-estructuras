@@ -1,8 +1,12 @@
 {
   "DekCru": [
-    "Minos"
+    "Minos",
+    "Brayan"
   ],
   "Minos": [
+    "DekCru"
+  ],
+  "Brayan": [
     "DekCru"
   ]
 }

@@ -24,5 +24,18 @@
     "color_perfil": "",
     "tema": "claro",
     "paleta": "bosque"
+  },
+  {
+    "id": "300",
+    "nombre": "Brayan Reyes",
+    "usuario": "Brayan",
+    "hash_password": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "bio": "",
+    "foto": "",
+    "link": "",
+    "banner": "",
+    "color_perfil": "",
+    "tema": "claro",
+    "paleta": "bosque"
   }
 ]
