@@ -26,5 +26,54 @@
     "archivo": "",
     "nombre_archivo": "",
     "editado": false
+  },
+  {
+    "id": "022d8633-3c7a-4199-937b-5cdaa1a11551",
+    "autor": "Minos",
+    "texto": "¡Hola a todos! Ya estoy en Social UNA 👋 ¿Quién se anima a un 3 en raya?",
+    "imagen": "9d5b9be0e9ab4f259b99a2365e305722.jpg",
+    "link": "",
+    "fecha": "2026-11-16T09:15:00",
+    "likes": [
+      "DekCru"
+    ],
+    "extra": "",
+    "reacciones": {},
+    "archivo": "",
+    "nombre_archivo": "",
+    "editado": false
+  },
+  {
+    "id": "d6b451fd-ddd4-4f4e-a318-8f975b148cbe",
+    "autor": "Brayan",
+    "texto": "Probando el muro por primera vez. ¡Está quedando muy bien! 🚀",
+    "imagen": "e6ea1152ed0c47b78984279bf9dab527.jpg",
+    "link": "",
+    "fecha": "2026-11-16T10:30:00",
+    "likes": [
+      "DekCru",
+      "Minos"
+    ],
+    "extra": "",
+    "reacciones": {},
+    "archivo": "",
+    "nombre_archivo": "",
+    "editado": false
+  },
+  {
+    "id": "0d41e425-c9e1-4b3c-a939-bd40e6d5bfa4",
+    "autor": "DekCru",
+    "texto": "Gracias por el apoyo, equipo. Seguimos mejorando la app 💪",
+    "imagen": "14c7253f528349dab7651a06e16cbca8.jpg",
+    "link": "",
+    "fecha": "2026-11-16T11:45:00",
+    "likes": [
+      "Brayan"
+    ],
+    "extra": "",
+    "reacciones": {},
+    "archivo": "",
+    "nombre_archivo": "",
+    "editado": false
   }
 ]
